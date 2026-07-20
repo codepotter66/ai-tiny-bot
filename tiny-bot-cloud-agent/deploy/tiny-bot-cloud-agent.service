@@ -1,0 +1,60 @@
+# ============================================================
+# tiny-bot-cloud-agent - systemd unit
+# ============================================================
+# 安装：
+#   sudo cp deploy/tiny-bot-cloud-agent.service /etc/systemd/system/
+#   sudo mkdir -p /etc/tiny-bot
+#   sudo cp .env.example /etc/tiny-bot/cloud-agent.env
+#   sudo vi /etc/tiny-bot/cloud-agent.env   # 填入真实密钥
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now tiny-bot-cloud-agent
+#
+# 运维：
+#   sudo systemctl status tiny-bot-cloud-agent
+#   sudo journalctl -u tiny-bot-cloud-agent -f
+#   sudo systemctl reload tiny-bot-cloud-agent   # 触发 SIGHUP
+# ============================================================
+
+[Unit]
+Description=TinyBot Cloud Agent
+Documentation=https://github.com/wisdomoasis/tiny-bot-cloud-agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tinybot
+Group=tinybot
+WorkingDirectory=/opt/tiny-bot
+EnvironmentFile=/etc/tiny-bot/cloud-agent.env
+ExecStart=/opt/tiny-bot/tiny-bot-cloud-agent
+ExecReload=/bin/kill -HUP $MAINPID
+
+# 资源限制
+LimitNOFILE=65536
+MemoryMax=800M
+TasksMax=512
+
+# 失败重启
+Restart=on-failure
+RestartSec=5s
+
+# 安全
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# 工作目录要可写
+ReadWritePaths=/opt/tiny-bot/data /opt/tiny-bot/workspace
+
+# 日志走 journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tiny-bot-cloud-agent
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,213 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/wisdomoasis/tiny-bot-cloud-agent/ws-protocol.schema.json",
+  "title": "tiny-bot-cloud-agent WebSocket Protocol",
+  "description": "WebSocket 文本帧协议 schema。type 字段决定消息种类。所有时序/类型约束都列在这里。",
+  "version": "1.0.0",
+  "type": "object",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/ClientHello"
+    },
+    {
+      "$ref": "#/definitions/ClientAudio"
+    },
+    {
+      "$ref": "#/definitions/ClientEnd"
+    },
+    {
+      "$ref": "#/definitions/ClientPing"
+    },
+    {
+      "$ref": "#/definitions/ClientInterrupt"
+    },
+    {
+      "$ref": "#/definitions/ServerHelloOK"
+    },
+    {
+      "$ref": "#/definitions/ServerSTT"
+    },
+    {
+      "$ref": "#/definitions/ServerText"
+    },
+    {
+      "$ref": "#/definitions/ServerAudio"
+    },
+    {
+      "$ref": "#/definitions/ServerTool"
+    },
+    {
+      "$ref": "#/definitions/ServerDone"
+    },
+    {
+      "$ref": "#/definitions/ServerError"
+    },
+    {
+      "$ref": "#/definitions/ServerPong"
+    }
+  ],
+  "definitions": {
+    "Direction": {
+      "type": "string",
+      "enum": ["client->server", "server->client"]
+    },
+    "ClientHello": {
+      "type": "object",
+      "description": "客户端首次连接，鉴权",
+      "required": ["type", "device_id", "token"],
+      "properties": {
+        "type":     { "const": "hello" },
+        "device_id": { "type": "string", "minLength": 1, "maxLength": 64, "description": "设备 ID，需在 SQLite devices 表中存在且 status=bound" },
+        "token":    { "type": "string", "minLength": 64, "maxLength": 64, "description": "POST /provision 返回的 hex token (64 chars = 32 bytes)" },
+        "proto":    { "type": "integer", "const": 1, "description": "协议版本，当前固定 1" }
+      },
+      "additionalProperties": false
+    },
+    "ClientAudio": {
+      "type": "object",
+      "description": "上行音频 chunk，PCM 16 kHz 16-bit mono, base64 编码",
+      "required": ["type", "data"],
+      "properties": {
+        "type": { "const": "audio" },
+        "seq":  { "type": "integer", "minimum": 0, "description": "chunk 序号，从 0 开始" },
+        "data": { "type": "string", "minLength": 4, "description": "base64.StdEncoding 后的 PCM 字节（建议 32-100 ms / chunk，约 1024-3200 字节 PCM）" },
+        "ts_ms": { "type": "integer", "description": "客户端时间戳，仅调试用" }
+      },
+      "additionalProperties": false
+    },
+    "ClientEnd": {
+      "type": "object",
+      "description": "一句话录音结束，服务端会触发 ASR",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "end" }
+      },
+      "additionalProperties": false
+    },
+    "ClientPing": {
+      "type": "object",
+      "description": "keepalive，服务端会回 pong",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "ping" }
+      },
+      "additionalProperties": false
+    },
+    "ClientInterrupt": {
+      "type": "object",
+      "description": "打断当前 turn（v1 简化：仅取消 in-flight LLM）",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "interrupt" }
+      },
+      "additionalProperties": false
+    },
+    "ServerHelloOK": {
+      "type": "object",
+      "description": "鉴权通过",
+      "required": ["type", "sample_rate"],
+      "properties": {
+        "type":        { "const": "hello.ok" },
+        "sample_rate": { "const": 16000, "description": "TTS 下行 PCM 采样率，固定 16000" },
+        "proto":       { "type": "integer", "description": "服务端认定的协议版本" }
+      },
+      "additionalProperties": false
+    },
+    "ServerSTT": {
+      "type": "object",
+      "description": "ASR 转写结果",
+      "required": ["type", "text"],
+      "properties": {
+        "type": { "const": "stt" },
+        "text": { "type": "string", "description": "识别出的用户文本" }
+      },
+      "additionalProperties": false
+    },
+    "ServerText": {
+      "type": "object",
+      "description": "LLM 中间 token（流式）",
+      "required": ["type", "text"],
+      "properties": {
+        "type": { "const": "text" },
+        "text": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "ServerAudio": {
+      "type": "object",
+      "description": "下行 TTS chunk，PCM 16 kHz 16-bit mono, base64 编码",
+      "required": ["type", "data"],
+      "properties": {
+        "type": { "const": "audio" },
+        "seq":  { "type": "integer", "minimum": 1, "description": "chunk 序号，从 1 开始单调递增" },
+        "data": { "type": "string", "description": "base64.StdEncoding 后的 PCM 字节" }
+      },
+      "additionalProperties": false
+    },
+    "ServerTool": {
+      "type": "object",
+      "description": "工具调用事件（debug 用，可选）",
+      "required": ["type", "tool"],
+      "properties": {
+        "type": { "const": "tool" },
+        "tool": { "type": "string" },
+        "args": { "type": "string", "description": "JSON 字符串" }
+      },
+      "additionalProperties": false
+    },
+    "ServerDone": {
+      "type": "object",
+      "description": "turn 结束。客户端可发下一条 audio 或断开",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "done" }
+      },
+      "additionalProperties": false
+    },
+    "ServerError": {
+      "type": "object",
+      "description": "错误。error 字段是 'CODE:message' 格式",
+      "required": ["type", "error"],
+      "properties": {
+        "type":   { "const": "error" },
+        "error":  { "type": "string", "pattern": "^[A-Z_]+:.+$" }
+      },
+      "additionalProperties": false
+    },
+    "ServerPong": {
+      "type": "object",
+      "description": "对 ping 的回应",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "pong" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "errorCodes": {
+    "AUTH_FAIL":     "鉴权失败：device_id 不存在 / token 错误 / 设备未 bound",
+    "BAD_PROTO":     "协议版本不匹配",
+    "RATE_LIMIT":    "（保留）",
+    "STT_FAIL":      "ASR 失败",
+    "LLM_FAIL":      "LLM 调用失败或 turn 超时",
+    "TTS_FAIL":      "TTS 合成失败",
+    "INTERNAL":      "服务端内部错误",
+    "TAKEN_OVER":    "同一 device_id 已有活跃连接"
+  },
+  "connection": {
+    "url": "/ws",
+    "maxFrameBytes": 1048576,
+    "pingInterval": "20s (coder/websocket 自动处理)",
+    "idleTimeout": "60s",
+    "transport": "WebSocket 文本帧（不要用二进制帧）",
+    "subprotocol": "无"
+  },
+  "audio": {
+    "sampleRate": 16000,
+    "bitDepth": 16,
+    "channels": 1,
+    "byteOrder": "little-endian (PCM 16-bit signed LE)",
+    "encoding": "base64.StdEncoding (RFC 4648, 带 + 和 /)",
+    "chunkSize": "建议 32-100 ms / chunk (1024-3200 字节 PCM)"
+  }
+}

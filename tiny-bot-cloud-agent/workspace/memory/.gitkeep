@@ -1,0 +1,2 @@
+# 设备记忆按 <device_id>/YYYY-MM-DD.md 分目录存放
+# v1 占位，实际写入由 internal/memory/markdown.go 完成

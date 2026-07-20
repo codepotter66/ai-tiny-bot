@@ -1,0 +1,1635 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tiny-bot-cloud-agent demo</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a2028;
+    --border: #2a3340;
+    --fg: #e6e9ec;
+    --muted: #7a8595;
+    --accent: #3b82f6;
+    --green: #22c55e;
+    --red: #ef4444;
+    --yellow: #eab308;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    min-height: 100dvh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "header header"
+      "sidebar main";
+    height: 100vh;
+  }
+  header {
+    grid-area: header;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--panel);
+  }
+  header h1 { font-size: 16px; font-weight: 600; }
+  .settings-btn {
+    display: none;
+    padding: 6px 12px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--fg);
+    font-size: 13px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  header .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  header .status {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--muted);
+  }
+  header .status .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted);
+  }
+  header .status.connected .dot { background: var(--green); }
+  header .status.recording .dot { background: var(--red); animation: blink 1s infinite; }
+  header .status.thinking .dot { background: var(--yellow); animation: blink 0.5s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  aside {
+    grid-area: sidebar;
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    overflow-y: auto;
+    background: var(--panel);
+  }
+  aside h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 12px 0 6px;
+    letter-spacing: 0.05em;
+  }
+  aside h2:first-child { margin-top: 0; }
+  aside label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin: 6px 0 2px;
+  }
+  aside input {
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--fg);
+    font-size: 13px;
+    font-family: var(--mono);
+  }
+  aside input:focus { outline: none; border-color: var(--accent); }
+  aside button {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: 6px;
+  }
+  aside button:hover { background: #2563eb; }
+  aside button:disabled { background: var(--border); cursor: not-allowed; }
+  aside button.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--fg);
+  }
+  aside .info {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  aside .info code {
+    font-family: var(--mono);
+    color: var(--accent);
+    font-size: 11px;
+  }
+  aside .config-pre {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg);
+    line-height: 1.4;
+    max-height: 280px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin-top: 6px;
+  }
+
+  main {
+    grid-area: main;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    overflow: hidden;
+  }
+  .controls {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .ptt {
+    --level: 0%;
+    position: relative;
+    width: min(200px, 45vw);
+    height: min(200px, 45vw);
+    border-radius: 50%;
+    background: var(--panel);
+    border: 3px solid var(--border);
+    color: var(--fg);
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    touch-action: manipulation;
+  }
+  .ptt:hover { border-color: var(--accent); }
+  /* v1.1.3: 音量浮动条 — 录音时显示真实 mic 输入大小 */
+  .ptt.recording {
+    background: var(--red);
+    border-color: var(--red);
+    transform: scale(1.05);
+    box-shadow: 0 0 30px rgba(239,68,68,0.5);
+  }
+  .ptt.recording::before {
+    /* conic-gradient 从顶部顺时针填充，颜色随音量从绿→黄→红 */
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: conic-gradient(
+      from -90deg,
+      rgba(34, 197, 94, 0.7) 0deg,
+      rgba(34, 197, 94, 0.7) calc(var(--level) * 3.6),
+      transparent calc(var(--level) * 3.6)
+    );
+    pointer-events: none;
+    transition: background 0.05s linear;
+  }
+  .ptt.recording::after {
+    /* 中间留个透明圆，让按钮文字可读 */
+    content: '';
+    position: absolute;
+    inset: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    pointer-events: none;
+  }
+  .ptt.recording { background: transparent; }
+  .ptt.recording > * { position: relative; z-index: 1; }
+  .ptt:disabled { opacity: 0.3; cursor: not-allowed; }
+  .ptt.listening {
+    border-color: var(--accent);
+    box-shadow: 0 0 20px rgba(59,130,246,0.25);
+  }
+  .ptt-hint {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .ptt-hint kbd {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+  .ptt-hint-mobile { display: none; }
+  .settings-panel .chk {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    margin-bottom: 10px;
+    color: var(--fg);
+  }
+  .settings-panel .chk input { width: auto; }
+  .settings-panel input[type="range"] {
+    width: 100%;
+    margin-bottom: 10px;
+  }
+
+  .settings-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 90;
+  }
+  .settings-backdrop.open { display: block; }
+
+  .log-wrap {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--border);
+    min-height: 0;
+  }
+  .log-toggle {
+    display: none;
+    width: 100%;
+    padding: 8px;
+    background: var(--panel);
+    border: none;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .log-wrap.collapsed .log { display: none; }
+
+  @media (max-width: 768px) {
+    .app {
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        "header"
+        "main";
+    }
+    header {
+      padding: 10px 12px;
+      padding-top: calc(10px + env(safe-area-inset-top, 0px));
+    }
+    header h1 { font-size: 14px; max-width: 52vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .settings-btn { display: inline-flex; }
+    aside.settings-panel {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      top: auto;
+      max-height: 85dvh;
+      border-right: none;
+      border-top: 1px solid var(--border);
+      border-radius: 16px 16px 0 0;
+      transform: translateY(100%);
+      transition: transform 0.25s ease;
+      z-index: 100;
+      box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.35);
+    }
+    aside.settings-panel.open { transform: translateY(0); }
+    aside input { font-size: 16px; }
+    .controls {
+      padding: 16px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+    }
+    .conversation {
+      padding: 12px;
+    }
+    .msg {
+      max-width: 92%;
+      font-size: 15px;
+    }
+    .ptt-hint-desktop { display: none; }
+    .ptt-hint-mobile { display: block; }
+    .log-toggle { display: block; }
+    .log-wrap:not(.collapsed) .log { max-height: 120px; }
+    .mic-banner { margin: 0 12px 10px; font-size: 12px; }
+  }
+
+  @media (hover: none) {
+    .ptt-hint-desktop { display: none; }
+    .ptt-hint-mobile { display: block; }
+  }
+
+  .conversation {
+    overflow-y: auto;
+    padding: 16px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .msg {
+    max-width: 80%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    line-height: 1.5;
+    font-size: 14px;
+    word-wrap: break-word;
+  }
+  .msg.user {
+    align-self: flex-end;
+    background: var(--accent);
+    color: white;
+  }
+  .msg.assistant {
+    align-self: flex-start;
+    background: var(--panel);
+    border: 1px solid var(--border);
+  }
+  .msg.system {
+    align-self: center;
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    font-style: italic;
+  }
+  .msg-meta {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .msg-wrap {
+    align-self: flex-start;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 80%;
+  }
+  .msg-wrap .msg.assistant {
+    max-width: 100%;
+  }
+  .msg-actions {
+    display: flex;
+    gap: 8px;
+  }
+  .replay-btn {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .replay-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .replay-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .log {
+    background: #000;
+    border-top: 1px solid var(--border);
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 8px 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.4;
+    color: #a3a3a3;
+  }
+  .log-line { white-space: pre-wrap; word-break: break-all; }
+  .log-line.in { color: #6ee7b7; }
+  .log-line.out { color: #93c5fd; }
+  .log-line.sys { color: #fbbf24; }
+  .log-line.err { color: #fca5a5; }
+  .mic-banner {
+    margin: 0 16px 12px;
+    padding: 10px 12px;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    border-radius: 8px;
+    color: #fca5a5;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .mic-banner[hidden] { display: none; }
+</style>
+</head>
+<body>
+<div class="settings-backdrop" id="settingsBackdrop"></div>
+<div class="app">
+  <header>
+    <h1>🤖 tiny-bot-cloud-agent demo</h1>
+    <div class="header-actions">
+      <a href="/demo/workspace.html" style="color:var(--accent);text-decoration:none;font-size:13px;margin-right:8px">Workspace</a>
+      <button type="button" class="settings-btn" id="settingsBtn">设置</button>
+      <div class="status" id="status">
+        <span class="dot"></span>
+        <span id="status-text">未连接</span>
+      </div>
+    </div>
+  </header>
+
+  <aside class="settings-panel" id="settingsPanel">
+    <h2>连接</h2>
+    <label>Server URL</label>
+    <input id="serverUrl" value="" placeholder="留空则使用当前站点">
+    <label>WS Path</label>
+    <input id="wsPath" value="/ws">
+    <label>Device ID</label>
+    <input id="deviceId" value="tinypal-demo">
+    <label>Pairing Code</label>
+    <input id="pairingCode" value="DEMO-1234">
+
+    <button id="provisionBtn">1. 配网（拿 token）</button>
+    <button id="connectBtn" class="secondary">2. 连接 WebSocket</button>
+    <button id="disconnectBtn" class="secondary" disabled>断开</button>
+
+    <h2>状态</h2>
+    <div class="info" id="info">
+      <div>Token: <code id="tokenDisplay">（未配网）</code></div>
+      <div>Session: <code id="sessionDisplay">（无）</code></div>
+    </div>
+
+    <h2>服务端配置（v1.1.8）</h2>
+    <button id="fetchConfigBtn" class="secondary">拉取 /config</button>
+    <pre id="configDisplay" class="config-pre" style="display:none"></pre>
+
+    <h2>免提对话（VAD）</h2>
+    <label class="chk">
+      <input type="checkbox" id="handsfreeToggle"> 启用免提（默认关，防误触）
+    </label>
+    <label>开始说话阈值 <span id="speechThVal">18</span>%</label>
+    <input type="range" id="speechThreshold" min="5" max="45" step="1" value="18">
+    <label>说完静音多久发送 <span id="silenceMsVal">1100</span> ms</label>
+    <input type="range" id="silenceMs" min="500" max="2500" step="100" value="1100">
+    <label>最短说话时长 <span id="minSpeechMsVal">400</span> ms</label>
+    <input type="range" id="minSpeechMs" min="150" max="1200" step="50" value="400">
+    <p style="font-size:11px;color:var(--muted);line-height:1.4;margin-top:4px">
+      乱触发：把「开始说话阈值」调高、最短时长调长。<br>
+      总感觉切太晚：把「静音多久」调短。
+    </p>
+
+    <h2>操作</h2>
+    <button id="clearLogBtn" class="secondary">清空日志</button>
+    <button id="clearConvBtn" class="secondary">清空对话</button>
+  </aside>
+
+  <main>
+    <div class="mic-banner" id="micBanner" hidden></div>
+    <div class="controls">
+      <button class="ptt" id="pttBtn" disabled>按住说话</button>
+      <div class="ptt-hint ptt-hint-desktop" id="pttHintDesktop">按住 <kbd>空格</kbd> 或按钮录音 · 松开发送</div>
+      <div class="ptt-hint ptt-hint-mobile" id="pttHintMobile">按住按钮说话 · 松开发送</div>
+    </div>
+
+    <div class="conversation" id="conversation"></div>
+
+    <div class="log-wrap collapsed" id="logWrap">
+      <button type="button" class="log-toggle" id="toggleLogBtn">展开日志</button>
+      <div class="log" id="log"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+// =============================================================
+// tiny-bot-cloud-agent demo - 前端调试器
+// =============================================================
+
+// ---- DOM refs ----
+const $ = id => document.getElementById(id);
+const serverUrlInput = $('serverUrl');
+const wsPathInput = $('wsPath');
+const deviceIdInput = $('deviceId');
+const pairingCodeInput = $('pairingCode');
+const provisionBtn = $('provisionBtn');
+const connectBtn = $('connectBtn');
+const disconnectBtn = $('disconnectBtn');
+const pttBtn = $('pttBtn');
+const clearLogBtn = $('clearLogBtn');
+const clearConvBtn = $('clearConvBtn');
+const fetchConfigBtn = $('fetchConfigBtn');
+const configDisplayEl = $('configDisplay');
+const statusEl = $('status');
+const statusTextEl = $('status-text');
+const tokenDisplayEl = $('tokenDisplay');
+const sessionDisplayEl = $('sessionDisplay');
+const conversationEl = $('conversation');
+const logEl = $('log');
+const logWrapEl = $('logWrap');
+const toggleLogBtn = $('toggleLogBtn');
+const settingsBtn = $('settingsBtn');
+const settingsPanel = $('settingsPanel');
+const settingsBackdrop = $('settingsBackdrop');
+const micBannerEl = $('micBanner');
+
+function resolveDefaultServerUrl() {
+  if (serverUrlInput.value.trim()) return;
+  if (window.location.protocol.startsWith('http')) {
+    serverUrlInput.value = window.location.origin;
+    return;
+  }
+  serverUrlInput.value = 'http://localhost:5678';
+}
+
+function openSettings() {
+  settingsPanel.classList.add('open');
+  settingsBackdrop.classList.add('open');
+}
+function closeSettings() {
+  settingsPanel.classList.remove('open');
+  settingsBackdrop.classList.remove('open');
+}
+
+settingsBtn.addEventListener('click', () => {
+  if (settingsPanel.classList.contains('open')) closeSettings();
+  else openSettings();
+});
+settingsBackdrop.addEventListener('click', closeSettings);
+toggleLogBtn.addEventListener('click', () => {
+  const collapsed = logWrapEl.classList.toggle('collapsed');
+  toggleLogBtn.textContent = collapsed ? '展开日志' : '收起日志';
+});
+
+// ---- State ----
+let token = localStorage.getItem('tb_token') || '';
+let ws = null;
+let isRecording = false;
+let mediaRecorder = null;
+let recordedBlobs = [];
+let audioContext = null;
+let nextPlayTime = 0;
+let audioChunksReceived = 0;
+let currentTurnAudio = [];
+let turnInFlight = false;
+let wsReady = false;
+let micBlocked = false;
+let micDenied = false;        // v1.1.2: turn 进行中 disable PTT
+let turnWatchdog = null;          // v1.1.2: 35s 兜底
+let lastPongAt = Date.now();      // v1.1.2: 客户端心跳
+let pingTimer = null;             // v1.1.2: 每 15s 发一次 ping
+// v1.1.3: 持久化 mic stream + 音量条
+let micStream = null;             // 第一次 PTT 后保持 active，后续复用（避免重复弹权限）
+let levelAnalyser = null;          // 音量分析器
+let levelRAF = null;              // requestAnimationFrame 句柄
+let levelSourceNode = null;
+
+// 免提 VAD（默认关；阈值可在设置面板调，偏保守防误触）
+const VAD_LS_KEY = 'tb_vad_settings';
+let handsfreeEnabled = false;
+let vadArmed = false;             // 正在监听音量（未 turn 中）
+let vadSpeechStartedAt = 0;
+let vadLastLoudAt = 0;
+let vadStopping = false;
+let vadStartPending = false;
+let vadSettings = {
+  speechThreshold: 18,  // 与音量条 % 同尺度
+  silenceMs: 1100,
+  minSpeechMs: 400,
+};
+
+// 最小录音字节数（~6ms @ 16kHz PCM），低于这个视为"没录到"
+const MIN_AUDIO_BYTES = 200;
+// watchdog 超时
+const TURN_TIMEOUT_MS = 35000;
+// 客户端 ping 间隔
+const PING_INTERVAL_MS = 15000;
+
+const handsfreeToggle = $('handsfreeToggle');
+const speechThresholdEl = $('speechThreshold');
+const silenceMsEl = $('silenceMs');
+const minSpeechMsEl = $('minSpeechMs');
+const speechThVal = $('speechThVal');
+const silenceMsVal = $('silenceMsVal');
+const minSpeechMsVal = $('minSpeechMsVal');
+const pttHintDesktop = $('pttHintDesktop');
+const pttHintMobile = $('pttHintMobile');
+
+function loadVadSettings() {
+  try {
+    const raw = localStorage.getItem(VAD_LS_KEY);
+    if (!raw) return;
+    const o = JSON.parse(raw);
+    if (o && typeof o === 'object') {
+      if (Number.isFinite(o.speechThreshold)) vadSettings.speechThreshold = o.speechThreshold;
+      if (Number.isFinite(o.silenceMs)) vadSettings.silenceMs = o.silenceMs;
+      if (Number.isFinite(o.minSpeechMs)) vadSettings.minSpeechMs = o.minSpeechMs;
+    }
+  } catch (_) { /* ignore */ }
+}
+function saveVadSettings() {
+  localStorage.setItem(VAD_LS_KEY, JSON.stringify(vadSettings));
+}
+function syncVadSettingsUI() {
+  if (!speechThresholdEl) return;
+  speechThresholdEl.value = String(vadSettings.speechThreshold);
+  silenceMsEl.value = String(vadSettings.silenceMs);
+  minSpeechMsEl.value = String(vadSettings.minSpeechMs);
+  speechThVal.textContent = String(vadSettings.speechThreshold);
+  silenceMsVal.textContent = String(vadSettings.silenceMs);
+  minSpeechMsVal.textContent = String(vadSettings.minSpeechMs);
+}
+loadVadSettings();
+syncVadSettingsUI();
+
+// ---- Helpers ----
+function log(direction, msg) {
+  const line = document.createElement('div');
+  line.className = 'log-line ' + direction;
+  const ts = new Date().toTimeString().slice(0, 8);
+  line.textContent = `[${ts}] ${msg}`;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function upgradeToHttps() {
+  const { protocol, hostname, host, pathname, search, hash } = window.location;
+  if (protocol === 'http:' && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    location.replace(`https://${host}${pathname}${search}${hash}`);
+    return true;
+  }
+  return false;
+}
+
+function getMicDeniedHelp() {
+  return '麦克风被拒绝：Chrome 点地址栏 🔒 → 权限 → 麦克风 → 允许 → 刷新；仍不行则 设置 → 网站设置 → 麦克风 → 删除本站点禁止';
+}
+
+function canUseMic() {
+  return window.isSecureContext
+    && navigator.mediaDevices
+    && typeof navigator.mediaDevices.getUserMedia === 'function';
+}
+
+function getMicBlockedMessage() {
+  const { protocol, hostname } = window.location;
+  if (protocol === 'file:') {
+    return '不能从 file:// 打开：请访问 http://localhost:5678/demo/ 或 https://你的域名/demo/';
+  }
+  if (protocol === 'http:' && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    return '正在跳转到 HTTPS… 请用 https://' + hostname + '/demo/（不要用 http）';
+  }
+  if (!window.isSecureContext) {
+    return '当前不是安全上下文：麦克风仅支持 https:// 或 http://localhost';
+  }
+  if (!navigator.mediaDevices) {
+    return '当前浏览器不支持麦克风 API，请使用 Chrome / Safari 最新版';
+  }
+  return '当前环境无法使用麦克风';
+}
+
+function refreshPttButton() {
+  if (handsfreeEnabled) {
+    pttBtn.disabled = true;
+  } else {
+    pttBtn.disabled = micBlocked || turnInFlight || !wsReady;
+  }
+  if (micBlocked) {
+    pttBtn.title = getMicBlockedMessage();
+  } else if (turnInFlight) {
+    pttBtn.title = '等回复中，请稍候…';
+  } else if (!wsReady) {
+    pttBtn.title = '请先连接 WebSocket';
+  } else if (handsfreeEnabled) {
+    pttBtn.title = '免提已开：说话即可，说完稍停自动发送';
+  } else {
+    pttBtn.title = '按住说话';
+  }
+  updateHandsfreeChrome();
+}
+
+function updateHandsfreeChrome() {
+  if (!pttHintDesktop) return;
+  if (handsfreeEnabled) {
+    const tip = '免提已开 · 说完稍停即发送 · 阈值在设置里调';
+    pttHintDesktop.textContent = tip;
+    pttHintMobile.textContent = tip;
+    if (turnInFlight || vadStopping) {
+      pttBtn.classList.remove('listening', 'recording');
+      pttBtn.textContent = '处理中…';
+    } else if (isRecording) {
+      pttBtn.classList.add('recording');
+      pttBtn.classList.remove('listening');
+      pttBtn.textContent = '说话中…';
+    } else if (vadArmed) {
+      pttBtn.classList.add('listening');
+      pttBtn.classList.remove('recording');
+      pttBtn.textContent = '聆听中…';
+    } else {
+      pttBtn.classList.remove('listening', 'recording');
+      pttBtn.textContent = '免提待机';
+    }
+  } else {
+    pttHintDesktop.innerHTML = '按住 <kbd>空格</kbd> 或按钮录音 · 松开发送';
+    pttHintMobile.textContent = '按住按钮说话 · 松开发送';
+    if (!isRecording) {
+      pttBtn.classList.remove('listening', 'recording');
+      pttBtn.textContent = '按住说话';
+    }
+  }
+}
+
+function applyMicGate() {
+  micBlocked = !canUseMic();
+  const msg = micBlocked ? getMicBlockedMessage() : (micDenied ? getMicDeniedHelp() : '');
+  if (micBlocked || micDenied) {
+    micBannerEl.textContent = '⚠️ ' + msg;
+    micBannerEl.hidden = false;
+    if (micBlocked) log('err', msg);
+  } else {
+    micBannerEl.hidden = true;
+  }
+  refreshPttButton();
+}
+
+function handleMicError(err) {
+  log('err', `getUserMedia: ${err.name} ${err.message}`);
+  let hint = '';
+  if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+    micDenied = true;
+    hint = ' → ' + getMicDeniedHelp();
+    applyMicGate();
+  } else if (err.name === 'NotFoundError') {
+    hint = ' → 电脑没接麦克风';
+  } else if (err.name === 'NotReadableError') {
+    hint = ' → 麦克风被其他程序占用（Zoom / 录音软件）';
+  } else if (err.name === 'TypeError' || err.name === 'NotSupportedError' || !canUseMic()) {
+    hint = ' → ' + getMicBlockedMessage();
+  }
+  addSystem(`❌ 麦克风 ${err.name}: ${err.message}${hint}`);
+  setStatus(null, '麦克风错误');
+  releaseMicrophone();
+}
+
+// 麦克风权限预检：进页面就跑一次，明确告诉用户卡哪了
+async function checkMicPermission() {
+  applyMicGate();
+  if (micBlocked) return;
+  if (navigator.permissions) {
+    try {
+      const status = await navigator.permissions.query({ name: 'microphone' });
+      log('sys', `麦克风权限: ${status.state}`);
+      micDenied = status.state === 'denied';
+      if (micDenied) {
+        applyMicGate();
+        addSystem('⚠️ ' + getMicDeniedHelp());
+      }
+      status.onchange = () => {
+        micDenied = status.state === 'denied';
+        applyMicGate();
+      };
+    } catch {
+      // Permissions API 不支持 microphone（旧浏览器），忽略
+    }
+  }
+}
+
+function setStatus(state, text) {
+  statusEl.className = 'status' + (state ? ' ' + state : '');
+  statusTextEl.textContent = text;
+}
+
+// v1.1.2: turn 进行中 / 完成的 PTT enable 控制
+function setTurnInFlight(inFlight) {
+  const was = turnInFlight;
+  turnInFlight = inFlight;
+  refreshPttButton();
+  if (was && !inFlight) {
+    afterTurnIdle();
+  } else if (inFlight) {
+    pauseVadArm();
+  }
+}
+
+function afterTurnIdle() {
+  waitForPlaybackDrain().then(() => {
+    if (handsfreeEnabled && wsReady && !turnInFlight) {
+      armVadListening();
+    }
+  });
+}
+
+function waitForPlaybackDrain() {
+  return new Promise(resolve => {
+    const finish = () => setTimeout(resolve, 250);
+    const check = () => {
+      if (!audioContext) { finish(); return; }
+      if (audioContext.currentTime >= nextPlayTime - 0.02) { finish(); return; }
+      setTimeout(check, 80);
+    };
+    check();
+  });
+}
+
+function pauseVadArm() {
+  vadArmed = false;
+  vadSpeechStartedAt = 0;
+  vadLastLoudAt = 0;
+  refreshPttButton();
+}
+
+async function armVadListening() {
+  if (!handsfreeEnabled || !wsReady || turnInFlight || micBlocked) {
+    pauseVadArm();
+    return;
+  }
+  try {
+    const stream = await ensureMicrophone();
+    audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioContext.state === 'suspended') await audioContext.resume();
+    vadArmed = true;
+    vadSpeechStartedAt = 0;
+    vadLastLoudAt = 0;
+    startLevelMeter(stream, true);
+    refreshPttButton();
+    setStatus('connected', '免提聆听中');
+  } catch (err) {
+    handleMicError(err);
+    handsfreeEnabled = false;
+    if (handsfreeToggle) handsfreeToggle.checked = false;
+    pauseVadArm();
+  }
+}
+
+function onVadLevel(pct) {
+  if (!handsfreeEnabled || !vadArmed || turnInFlight || vadStopping) return;
+  const th = vadSettings.speechThreshold;
+  const now = Date.now();
+  if (pct >= th) {
+    vadLastLoudAt = now;
+    if (!isRecording && !vadStartPending && !vadStopping) {
+      vadSpeechStartedAt = now;
+      vadStartPending = true;
+      startRecording({ fromVad: true }).finally(() => { vadStartPending = false; });
+    }
+    return;
+  }
+  // 安静
+  if (!isRecording) return;
+  const spoken = now - vadSpeechStartedAt;
+  const silent = now - vadLastLoudAt;
+  if (spoken >= vadSettings.minSpeechMs && silent >= vadSettings.silenceMs) {
+    vadStopping = true;
+    stopRecording({ fromVad: true }).finally(() => {
+      vadStopping = false;
+      refreshPttButton();
+    });
+  }
+}
+
+// v1.1.2: 35s watchdog（如果服务端一直不发 done，自动重置）
+function startTurnWatchdog() {
+  clearTurnWatchdog();
+  turnWatchdog = setTimeout(() => {
+    if (turnInFlight) {
+      log('err', '客户端 watchdog: 35s 内未收到 done');
+      addSystem('⚠️ 服务端 35s 无响应，自动重置');
+      setStatus('connected', '已连接（超时）');
+      setTurnInFlight(false);
+    }
+  }, TURN_TIMEOUT_MS);
+}
+function clearTurnWatchdog() {
+  if (turnWatchdog) { clearTimeout(turnWatchdog); turnWatchdog = null; }
+}
+
+// v1.1.2: ws.send 错误包装
+function safeSend(obj) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    addSystem('❌ WS 已断开，发送失败');
+    setStatus(null, '已断开');
+    return false;
+  }
+  try {
+    ws.send(JSON.stringify(obj));
+    return true;
+  } catch (err) {
+    log('err', `ws.send failed: ${err.message}`);
+    addSystem(`❌ 发送失败: ${err.message}`);
+    setStatus(null, 'WS 错误');
+    return false;
+  }
+}
+
+// v1.1.2: 客户端心跳
+function startPingLoop() {
+  if (pingTimer) return;
+  pingTimer = setInterval(() => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    try {
+      ws.send(JSON.stringify({ type: 'ping' }));
+      // 30s 没回 pong → 认为连接挂了，主动关
+      if (Date.now() - lastPongAt > 30000) {
+        log('err', '客户端心跳超时 30s，主动关闭');
+        ws.close();
+      }
+    } catch (_) { /* ignore */ }
+  }, PING_INTERVAL_MS);
+}
+function stopPingLoop() {
+  if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+}
+
+// v1.1.3: 复用 mic stream，避免每次 PTT 弹权限框
+async function ensureMicrophone() {
+  if (!canUseMic()) {
+    const err = new Error(getMicBlockedMessage());
+    err.name = 'NotSupportedError';
+    throw err;
+  }
+  if (micStream && micStream.active && micStream.getAudioTracks().some(t => t.readyState === 'live')) {
+    return micStream;  // 已授权且 stream 活着 → 复用
+  }
+  log('sys', '请求麦克风权限（首次会弹浏览器对话框）...');
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      channelCount: 1,
+      sampleRate: 16000,
+      echoCancellation: true,
+      noiseSuppression: true,
+    }
+  });
+  micStream = stream;
+  log('sys', '✅ 麦克风权限已获取，stream 复用');
+  return stream;
+}
+
+// v1.1.3: 释放 mic（页面 unload 时调用，浏览器关闭会自动清理）
+function releaseMicrophone() {
+  if (micStream) {
+    micStream.getTracks().forEach(t => t.stop());
+    micStream = null;
+  }
+}
+
+// v1.1.3: 音量条 — 用 AnalyserNode 实时算 RMS；免提时持续喂 VAD
+function startLevelMeter(stream, keepForVad) {
+  if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  try { levelAnalyser && levelAnalyser.disconnect(); } catch (_) {}
+  try { levelSourceNode && levelSourceNode.disconnect(); } catch (_) {}
+
+  levelSourceNode = audioContext.createMediaStreamSource(stream);
+  levelAnalyser = audioContext.createAnalyser();
+  levelAnalyser.fftSize = 512;
+  levelAnalyser.smoothingTimeConstant = 0.6;
+  levelSourceNode.connect(levelAnalyser);
+
+  if (levelRAF) { cancelAnimationFrame(levelRAF); levelRAF = null; }
+  const data = new Uint8Array(levelAnalyser.fftSize);
+  const tick = () => {
+    if (!levelAnalyser) return;
+    if (!isRecording && !(handsfreeEnabled && vadArmed)) {
+      levelRAF = null;
+      return;
+    }
+    levelAnalyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      const v = (data[i] - 128) / 128;
+      sum += v * v;
+    }
+    const rms = Math.sqrt(sum / data.length);
+    const pct = Math.min(100, Math.max(0, rms * 280));
+    pttBtn.style.setProperty('--level', Math.max(2, pct) + '%');
+    if (handsfreeEnabled && vadArmed) onVadLevel(pct);
+    levelRAF = requestAnimationFrame(tick);
+  };
+  tick();
+  void keepForVad;
+}
+function stopLevelMeter() {
+  if (levelRAF) { cancelAnimationFrame(levelRAF); levelRAF = null; }
+  pttBtn.style.setProperty('--level', '0%');
+  try { levelAnalyser && levelAnalyser.disconnect(); } catch (_) {}
+  try { levelSourceNode && levelSourceNode.disconnect(); } catch (_) {}
+  // 免提聆听中会立刻重新 startLevelMeter，勿在 VAD 路径里无脑 stop
+}
+
+function langLabel(code) {
+  switch (code) {
+    case 'yue': return '粤语';
+    case 'en': return 'English';
+    case 'zh': return '普通话';
+    default: return code || '';
+  }
+}
+
+function addMessage(role, text) {
+  const msg = document.createElement('div');
+  msg.className = 'msg ' + role;
+  msg.textContent = text;
+  conversationEl.appendChild(msg);
+  conversationEl.scrollTop = conversationEl.scrollHeight;
+}
+
+function addSystem(text) {
+  addMessage('system', text);
+}
+
+// =============================================================
+// Step 1: 配网 (POST /provision)
+// =============================================================
+provisionBtn.addEventListener('click', async () => {
+  const serverUrl = serverUrlInput.value.replace(/\/+$/, '');
+  const deviceId = deviceIdInput.value;
+  const code = pairingCodeInput.value;
+
+  provisionBtn.disabled = true;
+  provisionBtn.textContent = '配网中...';
+
+  try {
+    // force=1：允许设备已 bound 时重新签发（demo 调试 + 硬件 factory reset 场景）
+    const url = `${serverUrl}/provision?device_id=${encodeURIComponent(deviceId)}&code=${encodeURIComponent(code)}&force=1`;
+    log('out', `POST ${url}`);
+    const resp = await fetch(url, { method: 'POST' });
+    const body = await resp.text();
+    log('in', `HTTP ${resp.status} ${body}`);
+
+    if (resp.status !== 200) {
+      throw new Error(`HTTP ${resp.status}: ${body}`);
+    }
+
+    const data = JSON.parse(body);
+    token = data.token;
+    localStorage.setItem('tb_token', token);
+    tokenDisplayEl.textContent = token.slice(0, 16) + '...';
+    addSystem(`✅ 配网成功，token=${token.slice(0, 8)}...（已存 localStorage）`);
+    setStatus(null, '已配网，待连接');
+  } catch (err) {
+    log('err', `配网失败: ${err.message}`);
+    addSystem(`❌ 配网失败: ${err.message}`);
+    setStatus(null, '配网失败');
+  } finally {
+    provisionBtn.disabled = false;
+    provisionBtn.textContent = '1. 配网（拿 token）';
+  }
+});
+
+// =============================================================
+// Step 2: 连接 WebSocket
+// =============================================================
+function wsUrl() {
+  const u = new URL(serverUrlInput.value);
+  u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+  u.pathname = wsPathInput.value;
+  return u.toString();
+}
+
+connectBtn.addEventListener('click', async () => {
+  if (!token) {
+    addSystem('⚠️ 请先配网拿 token');
+    return;
+  }
+  if (micBlocked) {
+    addSystem('⚠️ ' + getMicBlockedMessage());
+    return;
+  }
+  connectBtn.disabled = true;
+  connectBtn.textContent = '请求麦克风…';
+  try {
+    await ensureMicrophone();
+    micDenied = false;
+    applyMicGate();
+  } catch (err) {
+    handleMicError(err);
+    connectBtn.disabled = false;
+    connectBtn.textContent = '2. 连接 WebSocket';
+    return;
+  }
+  connectBtn.textContent = '连接中…';
+  const url = wsUrl();
+  log('sys', `WS connecting: ${url}`);
+  ws = new WebSocket(url);
+  sessionDisplayEl.textContent = 'connecting...';
+
+  ws.onopen = () => {
+    log('sys', 'WS connected');
+    sessionDisplayEl.textContent = 'open';
+    setStatus('connected', '已连接');
+    connectBtn.disabled = true;
+    disconnectBtn.disabled = false;
+    provisionBtn.disabled = true;  // 已连接就别再 provision 了
+
+    // 发 hello
+    const hello = { type: 'hello', device_id: deviceIdInput.value, token, proto: 1 };
+    ws.send(JSON.stringify(hello));
+    log('out', `→ ${JSON.stringify(hello).slice(0, 100)}`);
+  };
+
+  ws.onmessage = async (evt) => {
+    let msg;
+    try { msg = JSON.parse(evt.data); } catch { return; }
+    log('in', `← ${msg.type}${msg.text ? ' "' + msg.text.slice(0, 60) + '"' : ''}${msg.seq ? ' #' + msg.seq : ''}`);
+
+    if (msg.type === 'hello.ok') {
+      setStatus('connected', `已连接（${msg.sample_rate}Hz）`);
+      wsReady = true;
+      refreshPttButton();
+      addSystem(`✅ hello.ok · sample_rate=${msg.sample_rate}`);
+      // v1.1.2: 启心跳（每 15s 发 ping，超时 30s 自动断）
+      lastPongAt = Date.now();
+      startPingLoop();
+    } else if (msg.type === 'stt') {
+      const langTag = msg.lang ? `[${langLabel(msg.lang)}] ` : '';
+      addMessage('user', langTag + (msg.text || '(空)'));
+    } else if (msg.type === 'text') {
+      // 流式文本：累积显示
+      const last = conversationEl.querySelector('.msg.assistant.streaming');
+      if (last) {
+        last.textContent = (last.dataset.acc || '') + msg.text;
+        last.dataset.acc = last.textContent;
+      } else {
+        const m = document.createElement('div');
+        m.className = 'msg assistant streaming';
+        m.dataset.acc = msg.text;
+        m.textContent = msg.text;
+        conversationEl.appendChild(m);
+      }
+      conversationEl.scrollTop = conversationEl.scrollHeight;
+    } else if (msg.type === 'audio') {
+      audioChunksReceived++;
+      currentTurnAudio.push({ seq: msg.seq || 0, data: msg.data });
+      setStatus('thinking', `播放中 (chunk #${msg.seq})`);
+      await playAudio(msg.data);
+    } else if (msg.type === 'done') {
+      // 关闭 streaming 标记，并为有音频的回复挂重播按钮
+      const streaming = conversationEl.querySelector('.msg.assistant.streaming');
+      if (streaming) {
+        streaming.classList.remove('streaming');
+        const finalText = streaming.dataset.acc || '';
+        if (!finalText) {
+          streaming.remove();
+        } else if (currentTurnAudio.length > 0) {
+          attachReplayButton(streaming, [...currentTurnAudio]);
+        }
+      }
+      currentTurnAudio = [];
+      setStatus('connected', '已连接');
+      addSystem(`✅ done · 共收到 ${audioChunksReceived} 个音频块`);
+      audioChunksReceived = 0;
+      // v1.1.2: turn 完成，启 PTT、清 watchdog
+      setTurnInFlight(false);
+      clearTurnWatchdog();
+    } else if (msg.type === 'error') {
+      log('err', `error: ${msg.error}`);
+      addSystem(`❌ ${msg.error}`);
+      setStatus(null, '错误');
+      currentTurnAudio = [];
+      // v1.1.2: error 也算 turn 结束
+      setTurnInFlight(false);
+      clearTurnWatchdog();
+    } else if (msg.type === 'tool') {
+      addSystem(`🔧 tool: ${msg.tool}`);
+    } else if (msg.type === 'pong') {
+      // v1.1.2: 收到服务端 pong，更新心跳时间戳
+      lastPongAt = Date.now();
+    }
+  };
+
+  ws.onclose = () => {
+    log('sys', 'WS closed');
+    sessionDisplayEl.textContent = 'closed';
+    setStatus(null, '已断开');
+    wsReady = false;
+    handsfreeEnabled = false;
+    if (handsfreeToggle) handsfreeToggle.checked = false;
+    pauseVadArm();
+    turnInFlight = false; // 避免 onclose 里 setTurnInFlight 触发 afterTurnIdle 再开听
+    refreshPttButton();
+    clearTurnWatchdog();
+    stopPingLoop();
+    stopLevelMeter();
+    connectBtn.disabled = false;
+    connectBtn.textContent = '2. 连接 WebSocket';
+    disconnectBtn.disabled = true;
+    provisionBtn.disabled = !token;
+  };
+
+  ws.onerror = (e) => {
+    log('err', `WS error: ${e.message || '(无)'}`);
+    // v1.1.2: 错误也更新状态，否则用户只看到 onclose 才回退
+    if (turnInFlight) {
+      setStatus(null, 'WS 错误');
+      setTurnInFlight(false);
+      clearTurnWatchdog();
+    }
+  };
+});
+
+disconnectBtn.addEventListener('click', () => {
+  if (ws) {
+    ws.close();      // 触发 onclose，UI 由 onclose 统一处理
+    ws = null;
+  }
+  addSystem('🔌 手动断开');
+});
+
+// =============================================================
+// Audio: 录音 (mic → PCM 16k16 mono → base64 → WS audio)
+// =============================================================
+async function startRecording(opts) {
+  opts = opts || {};
+  if (handsfreeEnabled && !opts.fromVad) return;
+  if (isRecording) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    addSystem('⚠️ WS 未连接');
+    return;
+  }
+  if (turnInFlight) {
+    addSystem('⚠️ 上一个 turn 还在进行中');
+    return;
+  }
+  try {
+    const stream = await ensureMicrophone();
+    audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioContext.state === 'suspended') await audioContext.resume();
+    mediaRecorder = new MediaRecorder(stream);
+    recordedBlobs = [];
+    mediaRecorder.ondataavailable = e => {
+      if (e.data.size > 0) recordedBlobs.push(e.data);
+    };
+    mediaRecorder.start(100);
+    isRecording = true;
+    if (!opts.fromVad) {
+      pttBtn.classList.add('recording');
+      pttBtn.textContent = '录音中… 松开发送';
+      setStatus('recording', '录音中');
+      addSystem('🎤 开始录音');
+    } else {
+      addSystem('🎤 免提：检测到说话，开始录音');
+      setStatus('recording', '免提录音中');
+    }
+    updateHandsfreeChrome();
+    startLevelMeter(stream, true);
+  } catch (err) {
+    handleMicError(err);
+  }
+}
+
+async function stopRecording(opts) {
+  opts = opts || {};
+  if (handsfreeEnabled && !opts.fromVad && !opts.force) return;
+  if (!isRecording || !mediaRecorder) return;
+  isRecording = false;
+  pttBtn.classList.remove('recording');
+  if (!handsfreeEnabled) pttBtn.textContent = '按住说话';
+  setStatus('thinking', '处理中...');
+  pauseVadArm();
+  log('sys', '[1/6] stopRecording 开始（等 mediaRecorder stop 事件）');
+
+  let stopFired = false;
+  mediaRecorder.addEventListener('stop', () => { stopFired = true; }, { once: true });
+  mediaRecorder.stop();
+  stopLevelMeter();
+  log('sys', '[2/6] mediaRecorder.stop 已调用，等 ondataavailable flush（最多 2s）');
+
+  await new Promise(resolve => {
+    if (stopFired) { resolve(); return; }
+    const timer = setTimeout(resolve, 500);
+    mediaRecorder.addEventListener('stop', () => { clearTimeout(timer); resolve(); }, { once: true });
+  });
+  log('sys', '[2.5/6] 数据 ready');
+
+  const totalBytes = recordedBlobs.reduce((s, b) => s + b.size, 0);
+  addSystem(`🎤 录音结束 · ${recordedBlobs.length} chunks · ${(totalBytes / 1024).toFixed(1)} KB`);
+
+  if (recordedBlobs.length === 0 || totalBytes < MIN_AUDIO_BYTES) {
+    log('err', `录音为空（按住时间太短？只录到 ${totalBytes} 字节）`);
+    addSystem(handsfreeEnabled ? '❌ 录音过短已丢弃，继续聆听' : '❌ 录音为空，请按住至少半秒');
+    setStatus('connected', '已连接');
+    updateHandsfreeChrome();
+    if (handsfreeEnabled && wsReady) armVadListening();
+    return;
+  }
+
+  log('sys', `[3/6] 解码 webm → PCM 16k (${totalBytes} 字节 webm)`);
+  // 把 webm 整段解码成 PCM 16k16 mono
+  const t0 = performance.now();
+  const pcm16kBase64 = await blobToPcm16Base64(recordedBlobs);
+  const tDecode = (performance.now() - t0).toFixed(0);
+  if (!pcm16kBase64) {
+    log('err', `音频解码失败（耗时 ${tDecode}ms）`);
+    addSystem('❌ 音频解码失败');
+    setStatus('connected', '已连接');
+    if (handsfreeEnabled && wsReady) armVadListening();
+    return;
+  }
+  log('sys', `[4/6] 解码完成 · ${pcm16kBase64.length} 字符 base64 · 耗时 ${tDecode}ms`);
+
+  log('sys', `audio base64: ${pcm16kBase64.length} chars`);
+
+  // v1.1.2: 进入 turn-in-flight 状态 + 启 watchdog
+  currentTurnAudio = [];
+  nextPlayTime = 0;
+  setTurnInFlight(true);
+  startTurnWatchdog();
+
+  // 分片发 (每 ~4KB base64 ≈ 3KB PCM ≈ 1024 samples ≈ 64ms @ 16k)
+  const CHUNK = 4096;
+  let seq = 0;
+  let sendOk = true;
+  for (let i = 0; i < pcm16kBase64.length; i += CHUNK) {
+    const slice = pcm16kBase64.slice(i, i + CHUNK);
+    const msg = { type: 'audio', seq: seq++, data: slice };
+    if (!safeSend(msg)) { sendOk = false; break; }
+  }
+  log('out', `→ ${seq} audio chunks`);
+
+  if (!sendOk) {
+    setTurnInFlight(false);
+    clearTurnWatchdog();
+    return;
+  }
+
+  log('sys', '[5/6] audio chunks 发完');
+
+  // 发 end
+  if (!safeSend({ type: 'end' })) {
+    setTurnInFlight(false);
+    clearTurnWatchdog();
+    return;
+  }
+  log('out', '→ end');
+  log('sys', '[6/6] 等待服务端 done（35s watchdog 已起）');
+  setStatus('thinking', '等回复...');
+}
+
+async function blobToPcm16Base64(blobs) {
+  try {
+    const buf = new Blob(blobs, { type: 'audio/webm' });
+    const arr = await buf.arrayBuffer();
+    audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+    const decoded = await audioContext.decodeAudioData(arr);
+    const data = decoded.getChannelData(0);  // Float32Array
+
+    // 重采样到 16kHz (如果原始不是 16k)
+    const targetRate = 16000;
+    let samples;
+    if (decoded.sampleRate === targetRate) {
+      samples = data;
+    } else {
+      const ratio = targetRate / decoded.sampleRate;
+      const newLen = Math.floor(data.length * ratio);
+      samples = new Float32Array(newLen);
+      for (let i = 0; i < newLen; i++) {
+        samples[i] = data[Math.floor(i / ratio)];
+      }
+    }
+
+    // 转 Int16 PCM
+    const int16 = new Int16Array(samples.length);
+    for (let i = 0; i < samples.length; i++) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+
+    // base64
+    return int16ToBase64(int16);
+  } catch (err) {
+    log('err', `decodeAudioData: ${err.message}`);
+    return null;
+  }
+}
+
+function int16ToBase64(int16) {
+  const bytes = new Uint8Array(int16.buffer, int16.byteOffset, int16.byteLength);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+function base64ToInt16(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Int16Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 2);
+}
+
+function attachReplayButton(msgEl, chunks) {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg-wrap';
+  msgEl.parentNode.insertBefore(wrap, msgEl);
+  wrap.appendChild(msgEl);
+
+  const actions = document.createElement('div');
+  actions.className = 'msg-actions';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'replay-btn';
+  btn.textContent = '重播';
+  btn.addEventListener('click', async () => {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = '播放中…';
+    try {
+      await replayTurnAudio(chunks);
+    } catch (err) {
+      log('err', `replay: ${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '重播';
+    }
+  });
+  actions.appendChild(btn);
+  wrap.appendChild(actions);
+}
+
+async function replayTurnAudio(chunks) {
+  if (!chunks || chunks.length === 0) return;
+  audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+  if (audioContext.state === 'suspended') await audioContext.resume();
+
+  const sorted = [...chunks].sort((a, b) => (a.seq || 0) - (b.seq || 0));
+  let totalSamples = 0;
+  const parts = sorted.map(({ data }) => {
+    const int16 = base64ToInt16(data);
+    totalSamples += int16.length;
+    return int16;
+  });
+  if (totalSamples === 0) return;
+
+  const merged = new Float32Array(totalSamples);
+  let offset = 0;
+  for (const int16 of parts) {
+    for (let i = 0; i < int16.length; i++) {
+      merged[offset++] = int16[i] / (int16[i] < 0 ? 0x8000 : 0x7FFF);
+    }
+  }
+
+  const buf = audioContext.createBuffer(1, totalSamples, 16000);
+  buf.copyToChannel(merged, 0, 0);
+  const src = audioContext.createBufferSource();
+  src.buffer = buf;
+  src.connect(audioContext.destination);
+  await new Promise((resolve, reject) => {
+    src.onended = resolve;
+    src.onerror = reject;
+    src.start();
+  });
+}
+
+// =============================================================
+// Audio: 播放 (WS audio → base64 → PCM16 → AudioContext)
+// =============================================================
+async function playAudio(b64) {
+  try {
+    audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioContext.state === 'suspended') await audioContext.resume();
+
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const int16 = new Int16Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 2);
+    const f32 = new Float32Array(int16.length);
+    for (let i = 0; i < int16.length; i++) f32[i] = int16[i] / (int16[i] < 0 ? 0x8000 : 0x7FFF);
+
+    const buf = audioContext.createBuffer(1, f32.length, 16000);
+    buf.copyToChannel(f32, 0, 0);
+
+    const src = audioContext.createBufferSource();
+    src.buffer = buf;
+    src.connect(audioContext.destination);
+
+    // 顺序播放（避免重叠）
+    const start = Math.max(audioContext.currentTime, nextPlayTime);
+    src.start(start);
+    nextPlayTime = start + buf.duration;
+  } catch (err) {
+    log('err', `playAudio: ${err.message}`);
+  }
+}
+
+// =============================================================
+// PTT: 按住说话（免提开启时禁用）
+// =============================================================
+function pttPointerDown(e) {
+  if (handsfreeEnabled) return;
+  if (e && e.cancelable) e.preventDefault();
+  startRecording();
+}
+function pttPointerUp(e) {
+  if (handsfreeEnabled) return;
+  if (e && e.cancelable) e.preventDefault();
+  stopRecording();
+}
+pttBtn.addEventListener('mousedown', pttPointerDown);
+pttBtn.addEventListener('mouseup', pttPointerUp);
+pttBtn.addEventListener('mouseleave', () => { if (!handsfreeEnabled && isRecording) stopRecording(); });
+pttBtn.addEventListener('touchstart', pttPointerDown);
+pttBtn.addEventListener('touchend', pttPointerUp);
+
+document.addEventListener('keydown', e => {
+  const tag = (e.target && e.target.tagName) || '';
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
+  if (handsfreeEnabled) return;
+  if (e.code === 'Space' && !e.repeat && !isRecording && !turnInFlight) {
+    e.preventDefault();
+    startRecording();
+  }
+});
+document.addEventListener('keyup', e => {
+  if (handsfreeEnabled) return;
+  if (e.code === 'Space' && isRecording) {
+    e.preventDefault();
+    stopRecording();
+  }
+});
+
+function bindVadSettingsControls() {
+  if (!handsfreeToggle) return;
+  handsfreeToggle.addEventListener('change', async () => {
+    handsfreeEnabled = !!handsfreeToggle.checked;
+    if (handsfreeEnabled) {
+      if (!wsReady) {
+        addSystem('⚠️ 请先连接 WebSocket 再开免提');
+        handsfreeToggle.checked = false;
+        handsfreeEnabled = false;
+        return;
+      }
+      addSystem('免提已开（阈值偏保守，可在设置里调）');
+      await armVadListening();
+    } else {
+      pauseVadArm();
+      if (isRecording) await stopRecording({ force: true });
+      stopLevelMeter();
+      setStatus(wsReady ? 'connected' : null, wsReady ? '已连接' : '未连接');
+      refreshPttButton();
+      addSystem('免提已关，恢复按住说话');
+    }
+  });
+  const onRange = () => {
+    vadSettings.speechThreshold = Number(speechThresholdEl.value);
+    vadSettings.silenceMs = Number(silenceMsEl.value);
+    vadSettings.minSpeechMs = Number(minSpeechMsEl.value);
+    syncVadSettingsUI();
+    saveVadSettings();
+  };
+  speechThresholdEl.addEventListener('input', onRange);
+  silenceMsEl.addEventListener('input', onRange);
+  minSpeechMsEl.addEventListener('input', onRange);
+}
+bindVadSettingsControls();
+
+// =============================================================
+// Clear buttons
+// =============================================================
+clearLogBtn.addEventListener('click', () => { logEl.innerHTML = ''; });
+clearConvBtn.addEventListener('click', () => { conversationEl.innerHTML = ''; });
+
+// v1.1.8: 拉取服务端 /config（用于确认 server 实际生效的 provider / 凭证是否就绪）
+fetchConfigBtn.addEventListener('click', async () => {
+  const serverUrl = serverUrlInput.value.replace(/\/+$/, '');
+  fetchConfigBtn.disabled = true;
+  fetchConfigBtn.textContent = '拉取中...';
+  try {
+    const resp = await fetch(`${serverUrl}/config`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    configDisplayEl.textContent = JSON.stringify(data, null, 2);
+    configDisplayEl.style.display = 'block';
+    addSystem('✅ /config 已更新');
+  } catch (err) {
+    addSystem(`❌ 拉取 /config 失败: ${err.message}`);
+  } finally {
+    fetchConfigBtn.disabled = false;
+    fetchConfigBtn.textContent = '拉取 /config';
+  }
+});
+
+// =============================================================
+// Init
+// =============================================================
+if (!upgradeToHttps()) {
+  resolveDefaultServerUrl();
+  if (token) {
+    tokenDisplayEl.textContent = token.slice(0, 16) + '...';
+    setStatus(null, '已配网，待连接');
+  } else {
+    setStatus(null, '未配网');
+  }
+  log('sys', 'demo loaded. Server: ' + serverUrlInput.value);
+  checkMicPermission();
+}
+</script>
+</body>
+</html>

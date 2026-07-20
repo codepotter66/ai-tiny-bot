@@ -1,0 +1,14 @@
+# tiny-bot-caddy — 从 Alpine 安装 Caddy，避免 docker.io/caddy 在 Mac 上 save 失败
+# 构建：docker build --platform linux/amd64 --provenance=false -f docker/Dockerfile.caddy -t tiny-bot-caddy:2-alpine .
+
+ARG RUNTIME_BASE=alpine:3.19
+FROM ${RUNTIME_BASE}
+
+RUN apk add --no-cache caddy ca-certificates openssl
+
+COPY deploy/caddy-selfsigned-entrypoint.sh /caddy-entrypoint.sh
+RUN chmod +x /caddy-entrypoint.sh
+
+EXPOSE 80 443
+
+ENTRYPOINT ["/caddy-entrypoint.sh"]

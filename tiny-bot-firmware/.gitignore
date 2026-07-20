@@ -1,0 +1,7 @@
+# PlatformIO
+.pio/
+.vscode/
+.DS_Store
+
+# Private local config (copy from config.h.example)
+include/config.h

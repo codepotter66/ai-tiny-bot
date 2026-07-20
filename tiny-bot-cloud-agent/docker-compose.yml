@@ -1,0 +1,121 @@
+# ============================================================
+# tiny-bot-cloud-agent - docker-compose
+# ============================================================
+# 启动：
+#   cp .env.example .env   # 填密钥
+#   vi .env
+#   docker compose up -d
+#
+# 运维：
+#   docker compose ps
+#   docker compose logs -f agent
+#   docker compose restart agent     # 重启
+#   docker compose kill -s HUP agent # SIGHUP 热重载 persona
+#   docker compose down              # 停
+# ============================================================
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      # 国内环境：覆盖 base 镜像源（参考 docker/Dockerfile 头注释）
+      # args:
+      #   GO_BASE: mirror.baidubce.com/library/golang:1.22-alpine
+      #   RUNTIME_BASE: mirror.baidubce.com/library/alpine:3.19
+    image: tiny-bot-cloud-agent:dev
+    container_name: tiny-bot-cloud-agent
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    env_file:
+      - .env
+    volumes:
+      # 挂载 workspace（可写：情节日志 / facts.md；人设基线也可宿主机编辑）
+      - ./workspace:/opt/tiny-bot/workspace
+      # 数据持久化
+      - agent-data:/opt/tiny-bot/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # 资源限制（2c2g VPS 上给一半）
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 800M
+        reservations:
+          cpus: "0.5"
+          memory: 200M
+
+  # 可选 HTTPS（手机 demo 麦克风必需）
+  # - 有域名：--profile https + TB_PUBLIC_DOMAIN
+  # - 无域名：--profile https-selfsigned（自签）或 --profile tunnel（Cloudflare 临时 HTTPS）
+  caddy:
+    profiles: ["https"]
+    image: tiny-bot-caddy:2-alpine
+    pull_policy: never
+    container_name: tiny-bot-cloud-agent-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      TB_PUBLIC_DOMAIN: ${TB_PUBLIC_DOMAIN:-}
+      CADDY_EMAIL: ${CADDY_EMAIL:-}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      agent:
+        condition: service_healthy
+
+  caddy-selfsigned:
+    profiles: ["https-selfsigned"]
+    image: tiny-bot-caddy:2-alpine
+    pull_policy: never
+    container_name: tiny-bot-cloud-agent-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # 无硬编码默认；自签 profile 由 caddy-selfsigned-entrypoint.sh 校验必填
+      TB_PUBLIC_IP: ${TB_PUBLIC_IP:-}
+    volumes:
+      - ./deploy/Caddyfile.selfsigned:/etc/caddy/Caddyfile:ro
+      - caddy_certs:/etc/caddy/certs
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      agent:
+        condition: service_healthy
+
+  cloudflared:
+    profiles: ["tunnel"]
+    image: cloudflare/cloudflared:latest
+    container_name: tiny-bot-cloud-agent-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://agent:5678
+    depends_on:
+      agent:
+        condition: service_healthy
+
+volumes:
+  agent-data:
+    name: tiny-bot-cloud-agent-data
+  caddy_data:
+    name: tiny-bot-cloud-agent-caddy-data
+  caddy_config:
+    name: tiny-bot-cloud-agent-caddy-config
+  caddy_certs:
+    name: tiny-bot-cloud-agent-caddy-certs

@@ -1,0 +1,30 @@
+# 编译产物
+bin/
+coverage.out
+*.test
+
+# 数据
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# 运行时生成
+workspace/memory/*.md
+!workspace/memory/.gitkeep
+workspace/memory/*/
+!workspace/memory/*/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# 环境
+.env
+*.local
+
+# 部署产物（docker save / files 包）
+*.tar
+*.tar.gz

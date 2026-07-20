@@ -1,0 +1,10 @@
+{
+  "registry-mirrors": [
+    "https://docker.mirrors.aliyun.com",
+    "https://mirror.baidubce.com",
+    "https://docker.mirrors.ustc.edu.cn"
+  ],
+  "max-concurrent-downloads": 10,
+  "log-driver": "json-file",
+  "log-level": "warn"
+}

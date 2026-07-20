@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workspace 编辑 · tiny-bot</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a2028;
+    --border: #2a3340;
+    --fg: #e6e9ec;
+    --muted: #7a8595;
+    --accent: #3b82f6;
+    --green: #22c55e;
+    --red: #ef4444;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    min-height: 100dvh;
+  }
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  header h1 { font-size: 15px; font-weight: 600; }
+  header a { color: var(--accent); text-decoration: none; font-size: 13px; }
+  header .token-row {
+    display: flex;
+    flex: 1;
+    gap: 8px;
+    align-items: center;
+    min-width: 240px;
+  }
+  header input[type="password"],
+  header input[type="text"] {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button.secondary { background: #334155; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    height: calc(100dvh - 57px);
+  }
+  .sidebar {
+    border-right: 1px solid var(--border);
+    overflow: auto;
+    background: var(--panel);
+    padding: 8px;
+  }
+  .file {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    color: var(--fg);
+    padding: 8px 10px;
+    margin-bottom: 2px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: var(--mono);
+  }
+  .file:hover { background: #243044; }
+  .file.active { background: #1e3a5f; color: #93c5fd; }
+  .main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .toolbar .path {
+    flex: 1;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #editor {
+    flex: 1;
+    width: 100%;
+    border: none;
+    resize: none;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 14px;
+    outline: none;
+  }
+  #msg {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  #msg.ok { color: var(--green); }
+  #msg.err { color: var(--red); }
+  @media (max-width: 720px) {
+    .layout { grid-template-columns: 1fr; grid-template-rows: 160px 1fr; }
+    .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Workspace Markdown</h1>
+  <a href="/demo/">← Demo</a>
+  <div class="token-row">
+    <input id="token" type="password" placeholder="TB_WORKSPACE_EDITOR_TOKEN" autocomplete="off">
+    <button type="button" class="secondary" id="saveTokenBtn">记住 Token</button>
+    <button type="button" id="refreshBtn">刷新列表</button>
+  </div>
+</header>
+<div class="layout">
+  <aside class="sidebar" id="fileList"></aside>
+  <section class="main">
+    <div class="toolbar">
+      <span class="path" id="currentPath">未选择文件</span>
+      <span id="msg"></span>
+      <button type="button" class="secondary" id="reloadBtn" disabled>重新加载</button>
+      <button type="button" id="saveBtn" disabled>保存</button>
+    </div>
+    <textarea id="editor" spellcheck="false" placeholder="选择左侧文件开始编辑…"></textarea>
+  </section>
+</div>
+<script>
+(function () {
+  const TOKEN_KEY = 'tb_workspace_editor_token';
+  const tokenInput = document.getElementById('token');
+  const fileList = document.getElementById('fileList');
+  const editor = document.getElementById('editor');
+  const currentPathEl = document.getElementById('currentPath');
+  const msgEl = document.getElementById('msg');
+  const saveBtn = document.getElementById('saveBtn');
+  const reloadBtn = document.getElementById('reloadBtn');
+  let currentPath = '';
+  let filesCache = [];
+
+  tokenInput.value = sessionStorage.getItem(TOKEN_KEY) || '';
+
+  function setMsg(text, kind) {
+    msgEl.textContent = text || '';
+    msgEl.className = kind || '';
+  }
+
+  function authHeaders() {
+    const t = tokenInput.value.trim();
+    return t ? { 'Authorization': 'Bearer ' + t } : {};
+  }
+
+  async function api(path, opts) {
+    opts = opts || {};
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, authHeaders(), opts.headers || {});
+    const res = await fetch(path, Object.assign({}, opts, { headers: headers }));
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch (_) { data = { raw: text }; }
+    if (!res.ok) {
+      const err = (data && (data.error || data.raw)) || text || res.statusText;
+      throw new Error(res.status + ' ' + err);
+    }
+    return data;
+  }
+
+  function renderList(files) {
+    filesCache = files || [];
+    fileList.innerHTML = '';
+    if (!filesCache.length) {
+      fileList.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px">无文件或未授权</div>';
+      return;
+    }
+    filesCache.forEach(function (f) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'file' + (f === currentPath ? ' active' : '');
+      btn.textContent = f;
+      btn.onclick = function () { loadFile(f); };
+      fileList.appendChild(btn);
+    });
+  }
+
+  async function refreshList() {
+    setMsg('加载列表…');
+    try {
+      const data = await api('/api/workspace/files');
+      renderList(data.files || []);
+      setMsg('列表已更新', 'ok');
+    } catch (e) {
+      renderList([]);
+      setMsg(e.message, 'err');
+    }
+  }
+
+  async function loadFile(path) {
+    setMsg('读取…');
+    try {
+      const data = await api('/api/workspace/file?path=' + encodeURIComponent(path));
+      currentPath = data.path;
+      currentPathEl.textContent = currentPath;
+      editor.value = data.content || '';
+      saveBtn.disabled = false;
+      reloadBtn.disabled = false;
+      renderList(filesCache);
+      setMsg('已加载', 'ok');
+    } catch (e) {
+      setMsg(e.message, 'err');
+    }
+  }
+
+  async function saveFile() {
+    if (!currentPath) return;
+    setMsg('保存中…');
+    saveBtn.disabled = true;
+    try {
+      await api('/api/workspace/file', {
+        method: 'PUT',
+        body: JSON.stringify({ path: currentPath, content: editor.value })
+      });
+      setMsg('已保存', 'ok');
+    } catch (e) {
+      setMsg(e.message, 'err');
+    } finally {
+      saveBtn.disabled = false;
+    }
+  }
+
+  document.getElementById('saveTokenBtn').onclick = function () {
+    sessionStorage.setItem(TOKEN_KEY, tokenInput.value.trim());
+    setMsg('Token 已写入 sessionStorage', 'ok');
+  };
+  document.getElementById('refreshBtn').onclick = refreshList;
+  reloadBtn.onclick = function () { if (currentPath) loadFile(currentPath); };
+  saveBtn.onclick = saveFile;
+
+  if (tokenInput.value.trim()) refreshList();
+})();
+</script>
+</body>
+</html>

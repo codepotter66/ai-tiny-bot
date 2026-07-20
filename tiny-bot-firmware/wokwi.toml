@@ -1,0 +1,38 @@
+# ============================================================
+# Wokwi Simulation Configuration
+# ============================================================
+# Wokwi 模拟器配置文件
+# 用于 https://wokwi.com 在线模拟器
+#
+# 使用方法:
+# 1. 访问 https://wokwi.com
+# 2. 创建新项目或导入此项目的 diagram.json
+# 3. Wokwi 会自动读取此配置文件
+# ============================================================
+
+# Wokwi 全局配置
+[wokwi]
+# 固件文件路径（PlatformIO 编译后生成）
+firmware = ".pio/build/esp32dev/firmware.bin"
+# ESP32 模拟器版本
+version = "2.0"
+
+# Flash 大小（与实际硬件匹配）
+flashSize = "4"
+
+# PSRAM 大小（ESP32-WROOM 默认无 PSRAM，如有则填实际大小）
+psramSize = "0"
+
+# ============================================================
+# ESP32 特定配置
+# ============================================================
+[esp32]
+# MAC 地址（可自定义）
+macAddress = "24:0a:c4:00:01:6a"
+# CPU 频率，auto 表示使用默认 160MHz
+cpuFrequency = "240"
+
+# 串口配置（用于 Serial Monitor）
+[esp32.serial]
+enabled = true
+speed = 115200

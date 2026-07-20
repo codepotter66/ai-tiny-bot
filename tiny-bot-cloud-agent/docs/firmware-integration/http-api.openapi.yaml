@@ -1,0 +1,126 @@
+openapi: 3.0.3
+info:
+  title: tiny-bot-cloud-agent HTTP API
+  description: |
+    设备配网 + 健康检查 + metrics 的 HTTP 端点。
+    WebSocket 协议见 ws-protocol.schema.json（同一目录下）。
+  version: 1.0.0
+  contact:
+    name: tiny-bot-cloud-agent
+    url: https://github.com/wisdomoasis/tiny-bot-cloud-agent
+servers:
+  - url: http://localhost:5678
+    description: 本地
+  - url: https://your.domain.example
+    description: 生产（反代后）
+
+paths:
+  /healthz:
+    get:
+      summary: 存活检查（始终 200，除非进程崩溃）
+      operationId: healthz
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, uptime]
+                properties:
+                  ok:     { type: boolean, const: true }
+                  uptime: { type: integer, description: "秒" }
+
+  /readyz:
+    get:
+      summary: 就绪检查
+      operationId: readyz
+      responses:
+        "200":
+          description: ready
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ready]
+                properties:
+                  ready: { type: boolean, const: true }
+        "503":
+          description: not ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ready: { type: boolean, const: false }
+
+  /metrics:
+    get:
+      summary: 简单 JSON metrics
+      operationId: metrics
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uptime_seconds: { type: integer }
+                  go_version:     { type: string }
+                  providers:
+                    type: object
+                    properties:
+                      asr: { type: string, description: "asr provider name (mock|aliyun|...)" }
+                      llm: { type: string }
+                      tts: { type: string }
+
+  /provision:
+    post:
+      summary: 首次配网：pairing code 换长期 token
+      description: |
+        设备第一次启动时调用，参数里带 (device_id, pairing_code)，
+        返回 64 字符 hex token，存到 NVS。
+        同一 device 只能 provision 一次（pairing_code 用完即清空）。
+      operationId: provision
+      parameters:
+        - in: query
+          name: device_id
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+        - in: query
+          name: code
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 32 }
+      responses:
+        "200":
+          description: 成功，返回 token
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [device_id, token]
+                properties:
+                  device_id: { type: string }
+                  token:     { type: string, minLength: 64, maxLength: 64, description: "hex 32 字节" }
+                  hint:      { type: string }
+        "400":
+          description: 缺参数
+        "401":
+          description: pairing code 错误 / 设备已 bound
+
+  /ws:
+    get:
+      summary: WebSocket 升级
+      description: |
+        HTTP Upgrade 到 WebSocket。详见 ws-protocol.schema.json。
+        推荐 base64 编码客户端在 ESP32 端用 mbedtls base64。
+      operationId: ws
+      responses:
+        "101":
+          description: Switching Protocols（升级成功）
+        "4xx":
+          description: 升级失败
+
+components:
+  securitySchemes: {}

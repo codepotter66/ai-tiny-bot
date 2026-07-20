@@ -1,0 +1,16 @@
+# Caddy 反向代理：为 demo 提供 HTTPS（手机 getUserMedia 必需）
+#
+# 用法（服务器 .env）：
+#   TB_PUBLIC_DOMAIN=demo.example.com
+#   CADDY_EMAIL=you@example.com
+#   docker compose --profile https up -d
+#
+# 域名 A 记录指向服务器 IP，开放 80/443。
+
+{
+	email {$CADDY_EMAIL:}
+}
+
+{$TB_PUBLIC_DOMAIN} {
+	reverse_proxy agent:5678
+}

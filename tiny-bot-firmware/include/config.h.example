@@ -1,0 +1,114 @@
+/**
+ * ============================================================
+ * 配置文件模板 - 请复制为 config.h 并填入真实配置
+ * ============================================================
+ * 配置说明:
+ * 1. 复制此文件为 config.h
+ * 2. 填入自己的 WiFi 信息和云端服务地址
+ * 3. config.h 被 .gitignore 忽略，不会提交到仓库
+ *
+ * 对接文档：
+ *   https://github.com/wisdomoasis/tiny-bot-cloud-agent/docs/human-docs/02-firmware-integration.md
+ * ============================================================
+ */
+
+#ifndef CONFIG_H
+#define CONFIG_H
+
+// ============================================================
+// WiFi 配置
+// ============================================================
+#define WIFI_SSID "YourWiFiSSID"
+#define WIFI_PASSWORD "YourWiFiPassword"
+
+// ============================================================
+// 云端 Agent 服务地址
+// ============================================================
+// 本地联调 (TB_USE_TLS=0):
+//   HTTP_BASE "http://192.168.1.100:5678"
+//   WS_HOST / WS_PORT / WS_PATH 同上机
+// 生产反代 (TB_USE_TLS=1):
+//   HTTP_BASE "https://your.domain.example"
+//   WS_HOST "your.domain.example", WS_PORT 443, WS_PATH "/ws"
+#define TB_USE_TLS 0
+
+#define HTTP_BASE "http://192.168.1.100:5678"
+#define WS_HOST   "192.168.1.100"
+#define WS_PORT   5678
+#define WS_PATH   "/ws"
+
+// 调试：每次 provision 都带 force=1（量产保持 0；AUTH_FAIL 时固件会自动 force）
+#define TB_PROVISION_FORCE 0
+
+// 心跳：15s ping；30s 无服务端消息则重连
+#define TB_PING_INTERVAL_MS 15000
+#define TB_SERVER_IDLE_MS   30000
+#define TB_RECONNECT_MAX_MS 30000
+#define TB_TAKEN_OVER_WAIT_MS 5000
+
+// ============================================================
+// 设备身份（必须与云端 seed 预置的一致）
+// ============================================================
+// seed 在云端数据库「登记」设备，不是让板子立刻在线：
+//   cd ../tiny-bot-cloud-agent
+//   ./bin/seed -device-id tinypal-01 -pairing-code ABCD-1234
+// 板子上电后用同一 ID/码 POST /provision 拿 token，再连 WebSocket。
+// 未 seed → provision 401 (device not found)，OLED 一直 Reconnecting...
+#define TB_DEVICE_ID    "tinypal-01"
+#define TB_PAIRING_CODE "ABCD-1234"
+
+// ============================================================
+// 硬件引脚配置（一般不需要修改）
+// ============================================================
+
+// OLED 屏幕 (SSD1306 I2C)
+#define OLED_SDA_PIN 21
+#define OLED_SCL_PIN 22
+#define OLED_I2C_ADDR 0x3C
+
+// I2S 麦克风 (MS4030)
+#define I2S_MIC_SCK_PIN  25
+#define I2S_MIC_WS_PIN   33
+#define I2S_MIC_SD_PIN   32
+
+// I2S 功放 (MAX98357)
+#define I2S_SPK_DIN_PIN   14
+#define I2S_SPK_BCLK_PIN  26
+#define I2S_SPK_LRCLK_PIN 27
+
+// 按键（ESP32 DevKit 上的 BOOT 按键 = GPIO0, 内部上拉，按下 LOW）
+#define BTN_PIN 0
+
+// ============================================================
+// 音频配置
+// ============================================================
+// 上行（麦克风 → 云端）：16 kHz PCM 16-bit mono
+#define I2S_MIC_SAMPLE_RATE 16000
+// 下行（云端 → 喇叭）：与云端 hello.ok.sample_rate 一致
+//   当前 cloud-agent 发回 16 kHz，所以喇叭也设 16 kHz
+#define I2S_SPK_SAMPLE_RATE 16000
+
+// 单次录音 / 发送的 chunk 大小（样本数）
+//   512 样本 @ 16 kHz = 32 ms，base64 后约 700 字节
+//   范围建议 32-100 ms，对应 512-1600 样本
+#define AUDIO_CHUNK_SAMPLES 512
+// 单次录音最大时长（毫秒），超过自动停
+#define AI_MAX_AUDIO_LENGTH_MS 10000
+// 单帧 message 最大字节（包含 JSON 包装），超过云端会拒
+#define WS_MAX_FRAME_BYTES 4096
+
+// 免提 VAD（能量检测，对齐 cloud-agent demo 默认值）
+//   speechThreshold：峰值 |sample|/32768*100，超过则开始录音
+//   silenceMs：安静多久结束本轮；minSpeechMs：至少说够多久才允许因静音结束
+//   rearmDelayMs：播完/回 IDLE 后稍等再听，减轻喇叭余音误触发
+#define TB_VAD_SPEECH_THRESHOLD 18
+#define TB_VAD_SILENCE_MS 1100
+#define TB_VAD_MIN_SPEECH_MS 400
+#define TB_VAD_REARM_DELAY_MS 250
+
+// ============================================================
+// 协议版本（与 ws-protocol.schema.json 对应）
+// ============================================================
+#define TB_PROTOCOL_VERSION 1
+
+#endif  // CONFIG_H

@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "author": "TinyBot",
+  "name": "TinyBot - AI Voice Assistant",
+  "description": "ESP32 based AI voice assistant with OLED, microphone and speaker",
+  "parts": [
+    {
+      "id": "esp32",
+      "type": "esp32-devkit-v1",
+      "title": "ESP32 Dev Module",
+      "attrs": {
+        "buildFlags": "-DCORE_DEBUG_LEVEL=0 -DBOARD_HAS_PSRAM"
+      }
+    },
+    {
+      "id": "oled",
+      "type": "ssd1306",
+      "title": "SSD1306 OLED Display",
+      "attrs": {
+        "i2cAddress": "0x3C"
+      }
+    },
+    {
+      "id": "mic",
+      "type": "i2s-microphone",
+      "title": "I2S Microphone (MS4030)"
+    },
+    {
+      "id": "speaker",
+      "type": "max98357",
+      "title": "MAX98357 I2S Amplifier"
+    }
+  ],
+  "junctions": [
+    {
+      "id": "gnd_esp",
+      "type": "jumper",
+      "attrs": { "net": "gnd", "position": "350,390" }
+    },
+    {
+      "id": "gnd_oled",
+      "type": "jumper",
+      "attrs": { "net": "gnd", "position": "500,220" }
+    },
+    {
+      "id": "gnd_mic",
+      "type": "jumper",
+      "attrs": { "net": "gnd", "position": "200,300" }
+    },
+    {
+      "id": "gnd_spk",
+      "type": "jumper",
+      "attrs": { "net": "gnd", "position": "600,350" }
+    }
+  ],
+  "connections": [
+    ["esp32:3.3V", "oled:VCC", "green"],
+    ["esp32:GND.1", "gnd_esp:left", "black"],
+    ["gnd_esp:right", "oled:GND", "black"],
+    ["esp32:GPIO21", "oled:SDA", "blue"],
+    ["esp32:GPIO22", "oled:SCL", "yellow"],
+
+    ["esp32:3.3V", "mic:VCC", "red"],
+    ["esp32:GND.2", "gnd_mic:left", "black"],
+    ["gnd_mic:right", "mic:GND", "black"],
+    ["mic:LR", "esp32:GND.3", "black"],
+    ["esp32:GPIO25", "mic:SCK", "purple"],
+    ["esp32:GPIO33", "mic:WS", "orange"],
+    ["esp32:GPIO32", "mic:SD", "white"],
+
+    ["esp32:5V", "speaker:VIN", "red"],
+    ["esp32:GND.4", "gnd_spk:left", "black"],
+    ["gnd_spk:right", "speaker:GND", "black"],
+    ["esp32:GPIO14", "speaker:DIN", "green"],
+    ["esp32:GPIO26", "speaker:BCLK", "yellow"],
+    ["esp32:GPIO27", "speaker:LRCLK", "orange"],
+    ["esp32:5V", "speaker:SD", "red"]
+  ]
+}
