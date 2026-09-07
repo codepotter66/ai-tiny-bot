@@ -122,6 +122,15 @@ make tidy        # go mod tidy
 5. 大改动前先在 Plan 模式出方案
 6. 改完 `CHANGELOG.md` 追加一行
 
+## 每次可交付变更（ship）
+
+与仓库根 [`AGENTS.md`](../AGENTS.md) 一致；`stop` hook 会检查：
+
+1. 在本目录 `CHANGELOG.md` 的 `[Unreleased]` 追加一行（变更要点）
+2. 仅当约定 / 命令 / 目录结构变化时更新本 `CLAUDE.md` 或根 `AGENTS.md`（不要写成第二份 changelog）
+3. 英文 commit subject + body（HEREDOC），推当前功能分支；禁止推 `main`/`master`、禁止 force push
+4. 不提交 `.env`、密钥、真实公网 IP/端口、`config.h` 等敏感信息
+
 ## 详细方案
 
 `/Users/kyle.he/.claude/plans/tiny-bot-cloud-agent-agent-openclaw-age-lucky-hoare.md`

@@ -127,10 +127,19 @@ make main
 4. **保持代码简洁**，注释关键逻辑
 5. **不写魔数**——所有时长/采样率/端口走 `config.h`
 
+## 每次可交付变更（ship）
+
+与仓库根 [`AGENTS.md`](../AGENTS.md) 一致；`stop` hook 会检查：
+
+1. 在本目录 `CHANGELOG.md` 的 `[Unreleased]` 追加一行（变更要点）
+2. 仅当约定 / 命令 / 目录结构变化时更新本 `CLAUDE.md` 或根 `AGENTS.md`（不要写成第二份 changelog）
+3. 英文 commit subject + body（HEREDOC），推当前功能分支；禁止推 `main`/`master`、禁止 force push
+4. 不提交 `config.h`、WiFi 密码、pairing code、真实公网 IP/端口等敏感信息
+
 ## 已知限制 / 后续 TODO
 
 - **VAD**：仍用按键控制起停，未做静音检测
 - **TLS**：无证书 pinning（`setInsecure`）；生产建议改 CA
 - **采样率**：`hello.ok.sample_rate` 仅告警，不动态改 I2S
 - **多设备**：当前 NVS 名字写死，单设备够用
-- **tool**：仅 OLED/Serial 展示，不执行设备侧动作
+- **tool / status**：`status` 更新 OLED 进度；`tool` 为兜底展示，不执行设备侧动作

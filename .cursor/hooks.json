@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": "bash .cursor/hooks/git-pr-guard.sh",
+        "failClosed": true
+      }
+    ],
+    "stop": [
+      {
+        "command": "bash .cursor/hooks/ship-on-stop.sh",
+        "loop_limit": 3,
+        "timeout": 30
+      }
+    ]
+  }
+}
