@@ -143,6 +143,12 @@ if not git_segments and not gh_segments:
     emit("allow")
 
 
+CONV_SUBJECT_RE = re.compile(
+    r"^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)"
+    r"(\([a-zA-Z0-9/_.,-]+\))?!?: .+"
+)
+
+
 def has_token(args, tokens):
     return any(a in tokens for a in args)
 
@@ -417,6 +423,25 @@ for seg in git_segments:
             user_message="Blocked --no-verify / commit -n.",
         )
 
+    if sub == "commit":
+        msg = extract_commit_message(raw)
+        subject = ""
+        for line in msg.splitlines():
+            if line.strip():
+                subject = line.strip()
+                break
+        if subject and not CONV_SUBJECT_RE.match(subject):
+            emit(
+                "deny",
+                agent_message=(
+                    "Blocked: commit subject must use Conventional Commits, e.g. "
+                    "'feat: …', 'fix: …', 'docs: …', 'refactor: …', 'chore: …', "
+                    "'test: …', 'ci: …', 'build: …', 'perf: …', 'style: …', 'revert: …' "
+                    "(optional scope: feat(api): …). Focus the subject on why."
+                ),
+                user_message="Blocked commit: subject must be Conventional Commits (feat:/fix:/…).",
+            )
+
     # This solo repo allows commit/push on main. Force-push remains blocked above.
 
     if sub == "reset" and has_token(rest, ["--hard"]):
@@ -440,7 +465,9 @@ for seg in git_segments:
         )
 
 COMMIT_CHECKLIST = (
-    "Before committing, confirm: (1) English message via HEREDOC focuses on why, not what; "
+    "Before committing, confirm: (1) English Conventional Commits subject via HEREDOC "
+    "(feat:/fix:/docs:/refactor:/chore:/test:/ci:/build:/perf:/style:/revert:, "
+    "optional scope like feat(api): …) focused on why; "
     "(2) no .env / secrets / credentials / real public IPs staged; (3) do not use --no-verify; "
     "(4) only include files relevant to this change; "
     "(5) CHANGELOG.md and AGENTS.md/CLAUDE.md updated when required."

@@ -31,8 +31,11 @@ When a task finishes with file changes, the project `stop` hook
    developer conventions, commands, layout, or durable workflow changed
    (e.g. `.cursor/hooks`, rules). Do **not** treat them as a second changelog for
    routine bugfixes or product/human docs.
-3. **Commit** — English subject (why) + English body via HEREDOC. Never `--no-verify`.
-   Stage only files for this task (`git add -A` is discouraged). Leave unrelated WIP unstaged.
+3. **Commit** — English **Conventional Commits** subject + body via HEREDOC
+   (`feat:` / `fix:` / `docs:` / `refactor:` / `chore:` / `test:` / `ci:` / `build:` /
+   `perf:` / `style:` / `revert:`; optional scope e.g. `feat(api): …`). Subject focuses on
+   why. Never `--no-verify`. Stage only files for this task (`git add -A` is discouraged).
+   Leave unrelated WIP unstaged.
 4. **Push** — `git push -u origin HEAD`. This solo repo **allows** commit/push on `main`.
    Never force-push.
 
@@ -40,7 +43,8 @@ When a task finishes with file changes, the project `stop` hook
 `ship-on-stop` only checks **this session's** edits, not pre-existing dirty files.
 
 Hard gates live in `.cursor/hooks/git-pr-guard.sh` (before shell): no force-push,
-no `--no-verify`, and a secrets scan of staged diffs / commit messages.
+no `--no-verify`, Conventional Commits subjects, and a secrets scan of staged diffs /
+commit messages.
 
 ## Git remote (codepotter66)
 

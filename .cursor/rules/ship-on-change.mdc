@@ -10,7 +10,8 @@ Before ending a task that modified files:
 1. Append one bullet under `[Unreleased]` in the touched package's `CHANGELOG.md`
    (`tiny-bot-cloud-agent/` or `tiny-bot-firmware/`). Root/`docs/`/`.cursor/` → update root `AGENTS.md` (no root changelog).
 2. Update `AGENTS.md` or package `CLAUDE.md` only when conventions, commands, or layout changed — not as a second changelog.
-3. Commit with an **English** subject (why) + body via HEREDOC; stage only this task's files.
+3. Commit with an **English Conventional Commits** subject (`feat:` / `fix:` / `docs:` /
+   `refactor:` / `chore:` / …) + body via HEREDOC; stage only this task's files.
 4. `git push -u origin HEAD` (main is allowed). Never force-push, never `--no-verify`.
 5. Never commit secrets: `.env`, passwords, API keys, real public IPs/ports, `tiny-bot-firmware/include/config.h`, `*.pem`/`*.key`.
 
