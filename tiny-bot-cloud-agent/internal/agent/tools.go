@@ -156,9 +156,9 @@ func (a *Agent) registerMemoryBuiltins(reg *skills.Registry, deviceID string, no
 func (a *Agent) registerPersonaBuiltins(reg *skills.Registry, deviceID string) {
 	_ = reg.AddBuiltin(&skills.Builtin{
 		Name:        "persona.save_soul",
-		Description: "整段覆盖该用户的 SOUL（名字、语气、性格）。用户明确要求改机器人名字或性格时调用；传入完整 Markdown。",
+		Description: "整段覆盖该用户的 SOUL（名字、语气、性格）。用户要求改机器人名字/性格/语气时必须调用；content 用短版完整 Markdown（# SOUL + 几条要点即可），不要只口头答应。",
 		Parameters: map[string]skills.Param{
-			"content": {Type: "string", Description: "完整 SOUL Markdown 正文", Required: true},
+			"content": {Type: "string", Description: "完整 SOUL Markdown 正文（可短）", Required: true},
 		},
 		Handler: func(ctx context.Context, args map[string]interface{}) (string, error) {
 			content, _ := args["content"].(string)

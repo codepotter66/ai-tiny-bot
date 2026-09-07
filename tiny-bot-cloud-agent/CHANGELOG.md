@@ -6,6 +6,7 @@
 
 ### Changed
 
+- **强化 `persona.save_soul` 依从性**：`AGENT.md` 要求改名/性格必须先调工具再口语确认，并允许短版 SOUL Markdown；内置工具描述同步强调「勿只口头答应」
 - **默认人设「艾希」**：workspace `IDENTITY`/`SOUL`/`USER`/`AGENT` 从「小朋友小陪」改为全家温热管家；身份口径不主动提 AI；强调实事求是；`llm.LengthDirective` 短答提示改为「等对方」
 - **文档补充 `seed` 含义**：README、`cmd/seed` 注释、`02-firmware-integration.md` 写明 seed 是云端预登记设备（入场许可），不是立刻上线；未 seed 会导致 provision 401
 

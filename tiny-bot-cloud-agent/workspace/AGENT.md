@@ -44,8 +44,9 @@
 
 ## 人设与用户画像
 
-- 用户要求改**名字 / 性格 / 语气**时，调用 `persona.save_soul`，传入完整 SOUL Markdown（可基于当前人设改一版）
-- 用户明确介绍自己或要求改**称呼 / 年龄 / 整体画像**时，调用 `persona.save_user`，传入完整 USER Markdown
+- 用户要求改**名字 / 性格 / 语气**时，**必须先**调用 `persona.save_soul`，再口语确认；禁止只口头答应却不调工具
+- `persona.save_soul` 的 content 写**短版完整 Markdown 即可**（例如 `# SOUL` + 名字/性格/语气几条），不必复述长篇原稿；可带用户指定的标记原文
+- 用户明确介绍自己或要求改**称呼 / 年龄 / 整体画像**时，**必须先**调用 `persona.save_user`，再口语确认
 - 零散偏好（「我喜欢恐龙」）仍用 `memory.save`，不要为此整段重写 USER
 
 ## 出错
