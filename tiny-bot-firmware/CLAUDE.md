@@ -133,7 +133,7 @@ make main
 
 1. 在本目录 `CHANGELOG.md` 的 `[Unreleased]` 追加一行（变更要点）
 2. 仅当约定 / 命令 / 目录结构变化时更新本 `CLAUDE.md` 或根 `AGENTS.md`（不要写成第二份 changelog）
-3. 英文 commit subject + body（HEREDOC），推当前功能分支；禁止推 `main`/`master`、禁止 force push
+3. 英文 commit subject + body（HEREDOC），`git push -u origin HEAD`（本仓允许直接推 `main`）；禁止 force push
 4. 不提交 `config.h`、WiFi 密码、pairing code、真实公网 IP/端口等敏感信息
 
 ## 已知限制 / 后续 TODO

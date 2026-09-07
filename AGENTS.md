@@ -32,13 +32,14 @@ When a task finishes with file changes, the project `stop` hook
    routine bugfixes or product/human docs.
 3. **Commit** — English subject (why) + English body via HEREDOC. Never `--no-verify`.
    Stage only files for this task (`git add -A` is discouraged). Leave unrelated WIP unstaged.
-4. **Push** — `git push -u origin HEAD` on a **feature branch**. Never push `main`/`master`, never force-push.
+4. **Push** — `git push -u origin HEAD`. This solo repo **allows** commit/push on `main`.
+   Never force-push.
 
 `afterFileEdit` records session edit paths under `.cursor/hooks/state/` (gitignored).
 `ship-on-stop` only checks **this session's** edits, not pre-existing dirty files.
 
 Hard gates live in `.cursor/hooks/git-pr-guard.sh` (before shell): no force-push,
-no commit/push on main, no `--no-verify`, and a secrets scan of staged diffs / commit messages.
+no `--no-verify`, and a secrets scan of staged diffs / commit messages.
 
 ## Git remote (codepotter66)
 
@@ -61,5 +62,5 @@ Documented placeholders (`YOUR_…`, `example.com`, private RFC1918 ranges, prot
 ## Git safety (also enforced by hooks)
 
 - No `git push --force` / `-f` to shared remotes
-- No commits or pushes directly to `main` / `master`
+- Commit/push on `main` is allowed (solo repo)
 - No `git reset --hard` or `git clean -f` without explicit user request

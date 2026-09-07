@@ -417,42 +417,7 @@ for seg in git_segments:
             user_message="Blocked --no-verify / commit -n.",
         )
 
-    if sub == "push":
-        joined = " ".join(rest)
-        if re.search(
-            r"(?:^|\s)(?:origin\s+)?(?:main|master)(?:\s|$)|"
-            r"HEAD:(?:main|master)\b|"
-            r"refs/heads/(?:main|master)\b|"
-            r"\+?(?:main|master):(?:main|master)\b",
-            joined,
-        ):
-            emit(
-                "deny",
-                agent_message=(
-                    "Blocked: pushing directly to main/master is not allowed. "
-                    "Push a feature branch and open a pull request."
-                ),
-                user_message="Blocked push to main/master.",
-            )
-
-    if sub == "commit":
-        try:
-            branch = subprocess.check_output(
-                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                stderr=subprocess.DEVNULL,
-                text=True,
-            ).strip()
-        except Exception:
-            branch = ""
-        if branch in ("main", "master"):
-            emit(
-                "deny",
-                agent_message=(
-                    "Blocked: committing directly on main/master is not allowed. "
-                    "Create a feature branch, commit there, then open a pull request."
-                ),
-                user_message="Blocked commit on main/master.",
-            )
+    # This solo repo allows commit/push on main. Force-push remains blocked above.
 
     if sub == "reset" and has_token(rest, ["--hard"]):
         emit(

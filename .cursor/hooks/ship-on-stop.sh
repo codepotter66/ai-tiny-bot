@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # stop: if THIS session's edits need shipping, ask the agent to update docs,
-# commit in English, and push the current feature branch.
+# commit in English, and push the current branch (main is allowed in this repo).
 # Unrelated pre-existing WIP is ignored (scoped via afterFileEdit tracker).
 set -euo pipefail
 
@@ -102,10 +102,10 @@ if has_upstream:
 
 # No session edits → ignore leftover WIP; only remind if commits are unpushed.
 if not session_paths:
-    if ahead > 0 and branch not in ("main", "master"):
+    if ahead > 0:
         emit(
             "Ship-on-stop: branch is ahead of upstream. "
-            "Push with `git push -u origin HEAD` (never main/master / force-push)."
+            "Push with `git push -u origin HEAD` (never force-push)."
         )
     emit(clear_session=True, state_file=state_file)
 
@@ -114,23 +114,14 @@ if not changed_paths and ahead == 0:
     emit(clear_session=True, state_file=state_file)
 
 # Session edits committed but not pushed.
-if not changed_paths and ahead > 0 and branch not in ("main", "master"):
+if not changed_paths and ahead > 0:
     emit(
         "Ship-on-stop: this session's commits are not pushed. "
-        "Run `git push -u origin HEAD` (never main/master / force-push)."
+        "Run `git push -u origin HEAD` (never force-push)."
     )
 
 issues = []
 actions = []
-
-if branch in ("main", "master"):
-    issues.append(
-        f"Current branch is `{branch}`. Do not commit or push on main/master."
-    )
-    actions.append(
-        "Create a feature branch (`git switch -c <name>`), move the work there, "
-        "then commit and push that branch."
-    )
 
 CLOUD = "tiny-bot-cloud-agent"
 FW = "tiny-bot-firmware"
@@ -248,20 +239,21 @@ if root_code:
             "(no root CHANGELOG)."
         )
 
-if ahead > 0 and branch not in ("main", "master"):
+if ahead > 0:
     issues.append(
         f"Branch `{branch}` is {ahead} commit(s) ahead of upstream and not pushed."
     )
-    actions.append("Push with `git push -u origin HEAD` (never to main/master).")
+    actions.append("Push with `git push -u origin HEAD` (never force-push).")
 
-if changed_paths and branch not in ("main", "master"):
+if changed_paths:
     issues.append(
         "This session has uncommitted edits (scoped; unrelated WIP may remain)."
     )
     actions.append(
         "Stage only files for this task (never `git add -A`). "
         "Write an English commit subject (why) + body via HEREDOC. "
-        "Do not use `--no-verify`. Then `git push -u origin HEAD`."
+        "Do not use `--no-verify`. Then `git push -u origin HEAD` "
+        "(main is allowed in this repo; never force-push)."
     )
 
 SENSITIVE_NAME = re.compile(
@@ -315,7 +307,7 @@ msg_lines.extend(
         "Rules:",
         "- Commit subject and body must be English.",
         "- Never commit secrets: `.env`, passwords, API keys, real public IPs/ports, `config.h`, `*.pem`/`*.key`.",
-        "- Never push main/master or force-push.",
+        "- Never force-push. Committing/pushing on main is allowed in this repo.",
         "- Do not treat CLAUDE.md/AGENTS.md as a second changelog; only update them for conventions/commands/layout.",
         "- Scope the commit to this task only; leave unrelated WIP unstaged.",
     ]
