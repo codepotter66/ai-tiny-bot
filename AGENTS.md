@@ -10,6 +10,7 @@ Guidance for Cursor / Claude agents working in this repository.
 | [`tiny-bot-firmware/`](tiny-bot-firmware/) | ESP32 firmware (PlatformIO) |
 | [`docs/`](docs/) | Hardware / build guides |
 | [`.cursor/`](.cursor/) | Project hooks and rules |
+| `tmp/` | Local debug evidence / scratch only (listed in `.gitignore`; never commit or push) |
 
 Package-specific conventions:
 
@@ -56,6 +57,7 @@ Do not push with other GitHub identities.
 - `tiny-bot-firmware/include/config.h` (use `config.h.example`)
 - `*.pem` / `*.key` / private key blocks
 - Real passwords, API keys, tokens, real public IPs / host:port pairs
+- Local deploy/debug evidence under `tmp/` (gitignored); keep screenshots/logs there for review, do not stage them
 
 Documented placeholders (`YOUR_…`, `example.com`, private RFC1918 ranges, protocol default `:5678` in docs) are fine.
 

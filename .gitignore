@@ -30,3 +30,6 @@ tiny-bot-firmware/include/config.h
 
 # Cursor hook session state (edited-path tracker)
 .cursor/hooks/state/
+
+# Local debug evidence (not for git)
+tmp/
