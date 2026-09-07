@@ -28,6 +28,9 @@ type Session struct {
 	turnCtx context.Context
 	cancel  context.CancelFunc
 
+	// TurnTimeout 单轮 turn 超时；≤0 时用默认 120s。
+	TurnTimeout time.Duration
+
 	// 写入互斥（coder/websocket 是并发安全读但写不是）
 	writeMu sync.Mutex
 
@@ -147,7 +150,11 @@ func (s *Session) handleEnd() {
 	}
 	// 异步跑 turn，不阻塞 read loop
 	go func() {
-		turnCtx, turnCancel := context.WithTimeout(s.turnCtx, 30*time.Second)
+		timeout := s.TurnTimeout
+		if timeout <= 0 {
+			timeout = 120 * time.Second
+		}
+		turnCtx, turnCancel := context.WithTimeout(s.turnCtx, timeout)
 		s.turnMu.Lock()
 		s.turnCancel = turnCancel
 		s.turnMu.Unlock()
@@ -199,6 +206,17 @@ func (s *Session) SendSTT(text, lang string) {
 // SendTool 发工具调用事件。
 func (s *Session) SendTool(name, args string) {
 	s.send(ServerMsg{Type: MsgTool, Tool: name, Args: args})
+}
+
+// SendStatus 发任务步骤进度（静默，不进 TTS）。
+// progress < 0 时省略 progress 字段；≥0 时写入 0.0–1.0。
+func (s *Session) SendStatus(step, phase, text string, progress float64) {
+	m := ServerMsg{Type: MsgStatus, Step: step, Phase: phase, Text: text}
+	if progress >= 0 {
+		p := progress
+		m.Progress = &p
+	}
+	s.send(m)
 }
 
 // SendDone 发 turn 结束。

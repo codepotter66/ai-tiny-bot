@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,6 +24,8 @@ func TestLoad_DefaultsWhenNoFileNoEnv(t *testing.T) {
 		"TB_DB_PATH", "TB_WORKSPACE_ROOT",
 		"TB_AGENT_MAX_RESPONSE_CHARS", "TB_AGENT_HISTORY_TURNS",
 		"TB_AGENT_MEMORY_RECALL_K", "TB_AGENT_MEMORY_LOOKBACK_DAYS", "TB_AGENT_DAILY_TOKEN_CAP",
+		"TB_AGENT_FACTS_MAX", "TB_AGENT_TURN_TIMEOUT", "TB_AGENT_MAX_TOOL_ROUNDS",
+		"TB_CODE_RUN_TIMEOUT", "TB_CODE_PYTHON_BIN",
 		"TB_PPROF_ENABLED", "TB_HEALTHZ_ENABLED",
 		"TB_MAX_FRAME_BYTES", "TB_WS_PING_INTERVAL", "TB_WS_IDLE_TIMEOUT",
 	} {
@@ -35,6 +38,10 @@ func TestLoad_DefaultsWhenNoFileNoEnv(t *testing.T) {
 	assert.Equal(t, "mock", cfg.Providers.LLM)
 	assert.Equal(t, "info", cfg.Logging.Level)
 	assert.Equal(t, "json", cfg.Logging.Format)
+	assert.Equal(t, 120*time.Second, cfg.Agent.TurnTimeout)
+	assert.Equal(t, 8, cfg.Agent.MaxToolRounds)
+	assert.Equal(t, 15*time.Second, cfg.Agent.CodeRunTimeout)
+	assert.Equal(t, "python3", cfg.Agent.CodePythonBin)
 }
 
 func TestLoad_EnvOverridesDefaults(t *testing.T) {

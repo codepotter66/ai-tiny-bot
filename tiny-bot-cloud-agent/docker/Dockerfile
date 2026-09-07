@@ -53,7 +53,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 
 # ---- runtime stage ----
 FROM ${RUNTIME_BASE}
-RUN apk add --no-cache ca-certificates wget su-exec && \
+RUN apk add --no-cache ca-certificates wget su-exec python3 && \
     adduser -D -u 1000 -s /sbin/nologin tinybot
 WORKDIR /opt/tiny-bot
 COPY --from=build /out/tiny-bot-cloud-agent /opt/tiny-bot/tiny-bot-cloud-agent

@@ -69,11 +69,22 @@ type toolSender struct {
 	toolArgs string
 	text     string
 	done     bool
+	statuses []statusEvent
+}
+
+type statusEvent struct {
+	step     string
+	phase    string
+	text     string
+	progress float64
 }
 
 func (s *toolSender) SendSTT(string, string)      {}
 func (s *toolSender) SendText(t string)           { s.text += t }
 func (s *toolSender) SendTool(name, args string)  { s.toolName = name; s.toolArgs = args }
+func (s *toolSender) SendStatus(step, phase, text string, progress float64) {
+	s.statuses = append(s.statuses, statusEvent{step: step, phase: phase, text: text, progress: progress})
+}
 func (s *toolSender) SendPCMBytes(uint32, []byte) {}
 func (s *toolSender) SendDone()                   { s.done = true }
 
@@ -101,6 +112,16 @@ func TestTurn_ToolCalling(t *testing.T) {
 	assert.Contains(t, send.toolArgs, "杭州")
 	assert.Contains(t, send.text, "杭州")
 	assert.True(t, send.done)
+
+	require.Len(t, send.statuses, 2)
+	assert.Equal(t, "weather", send.statuses[0].step)
+	assert.Equal(t, "start", send.statuses[0].phase)
+	assert.Equal(t, "查询天气", send.statuses[0].text)
+	assert.Equal(t, 0.0, send.statuses[0].progress)
+	assert.Equal(t, "weather", send.statuses[1].step)
+	assert.Equal(t, "done", send.statuses[1].phase)
+	assert.Equal(t, "查询完成", send.statuses[1].text)
+	assert.Equal(t, 1.0, send.statuses[1].progress)
 }
 
 func TestTurn_MemorySaveWritesFacts(t *testing.T) {

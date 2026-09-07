@@ -16,6 +16,8 @@
 
 ### Added
 
+- **本机受限 Python `code.write` / `code.run`**：写入 `workspace/scratch/<device_id>/*.py`，`python3 -I` 超时执行且不继承 `TB_*` 密钥；复用 `status` 进度文案；配置 `TB_CODE_RUN_TIMEOUT` / `TB_CODE_PYTHON_BIN`；Alpine 镜像安装 `python3`
+- **单轮多段 `status` 事件流**：WebSocket 下行 `type=status`（`step`/`phase`/`text`/`progress`）；`runToolLoop` 在每个 tool 前后发 `start`/`done|error`（不进 TTS）；固件 OLED 优先显示 `status.text`；配置 `TB_AGENT_TURN_TIMEOUT`（默认 120s）、`TB_AGENT_MAX_TOOL_ROUNDS`（默认 8）
 - **`make seed` / `make seed-remote`**：本机可登记设备；`seed-remote` 经 SSH 在服务器 agent 容器内跑 `/opt/tiny-bot/seed`（变量 `DEVICE_ID` / `PAIRING_CODE` / `DISPLAY_NAME`），无需登录服务器手敲
 - **`cmd/list-voices`**：调用 MiniMax `/v1/get_voice` 列出账号可用音色；支持 `-type` / `-q` / `-json`；`make list-voices`
 - **Demo 免提对话**：能量 VAD 自动开停录音；设置面板可调开始说话阈值 / 静音时长 / 最短说话时长（默认偏保守）；agent 回复播完后再听；保留按住说话

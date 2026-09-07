@@ -14,6 +14,8 @@ workspace/memory/*.md
 !workspace/memory/.gitkeep
 workspace/memory/*/
 !workspace/memory/*/.gitkeep
+workspace/scratch/
+!workspace/scratch/.gitkeep
 
 # IDE
 .vscode/

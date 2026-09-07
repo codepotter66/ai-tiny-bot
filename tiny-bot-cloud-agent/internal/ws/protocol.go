@@ -18,9 +18,18 @@ const (
 	MsgText    = "text"     // LLM 中间文本片段（debug 模式）
 	MsgAudioDn = "audio"    // 下行 TTS chunk（base64 PCM）
 	MsgTool    = "tool"     // 工具调用（tool + args 字段）
+	MsgStatus  = "status"   // 任务步骤进度（静默，不触发 TTS）
 	MsgDone    = "done"     // turn 结束
 	MsgError   = "error"    // 错误（error 字段是 code:message）
 	MsgPong    = "pong"     // keepalive
+)
+
+// status 消息的 phase 取值。
+const (
+	StatusStart   = "start"
+	StatusRunning = "running"
+	StatusDone    = "done"
+	StatusError   = "error"
 )
 
 // ClientMsg 客户端发来的消息。
@@ -36,16 +45,20 @@ type ClientMsg struct {
 
 // ServerMsg 服务端返回的消息。
 type ServerMsg struct {
-	Type       string `json:"type"`
-	Seq        uint32 `json:"seq,omitempty"`
-	Data       string `json:"data,omitempty"`   // base64 PCM（16k16 mono）
-	Text       string `json:"text,omitempty"`   // STT / text 类型
-	Lang       string `json:"lang,omitempty"`   // stt 类型：检测到的语种 zh/yue/en
-	Tool       string `json:"tool,omitempty"`   // tool 类型：skill name
-	Args       string `json:"args,omitempty"`   // tool 类型：JSON args
-	Err        string `json:"error,omitempty"`  // error 类型
-	SampleRate int    `json:"sample_rate,omitempty"` // hello.ok
-	Proto      int    `json:"proto,omitempty"`
+	Type       string   `json:"type"`
+	Seq        uint32   `json:"seq,omitempty"`
+	Data       string   `json:"data,omitempty"`   // base64 PCM（16k16 mono）
+	Text       string   `json:"text,omitempty"`   // STT / text / status 类型
+	Lang       string   `json:"lang,omitempty"`   // stt 类型：检测到的语种 zh/yue/en
+	Tool       string   `json:"tool,omitempty"`   // tool 类型：skill name
+	Args       string   `json:"args,omitempty"`   // tool 类型：JSON args
+	Step       string   `json:"step,omitempty"`   // status 类型：步骤 ID
+	Phase      string   `json:"phase,omitempty"`  // status 类型：start|running|done|error
+	Progress   *float64 `json:"progress,omitempty"` // status 类型：0.0–1.0
+	Detail     string   `json:"detail,omitempty"` // status 类型：调试详情
+	Err        string   `json:"error,omitempty"`  // error 类型
+	SampleRate int      `json:"sample_rate,omitempty"` // hello.ok
+	Proto      int      `json:"proto,omitempty"`
 }
 
 // Error 错误码常量（写到 ServerMsg.Err 前缀）。

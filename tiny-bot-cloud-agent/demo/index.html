@@ -1200,6 +1200,8 @@ connectBtn.addEventListener('click', async () => {
       clearTurnWatchdog();
     } else if (msg.type === 'tool') {
       addSystem(`🔧 tool: ${msg.tool}`);
+    } else if (msg.type === 'status') {
+      addSystem(`📌 ${msg.phase || ''}: ${msg.text || msg.step || ''}`);
     } else if (msg.type === 'pong') {
       // v1.1.2: 收到服务端 pong，更新心跳时间戳
       lastPongAt = Date.now();

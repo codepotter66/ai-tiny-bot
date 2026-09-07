@@ -459,8 +459,10 @@ frontmatter 字段：
 | 解析 LLM 返回的 tool_calls | **已实现**（`openai_compat.go` 增量拼接） |
 | 调用 `skills.Run()` 执行脚本 | **已实现**（`agent.runToolLoop`） |
 | `SendTool()` 通知客户端 | **已实现** |
+| `SendStatus()` 静默步骤进度 | **已实现**（tool 前后 `start`/`done|error`，不进 TTS） |
 | `memory.save` / `memory.recall` 内置工具 | **已实现** |
 | `persona.save_soul` / `persona.save_user` | **已实现**（写 SQLite per-user 覆盖） |
+| `code.write` / `code.run` 受限 Python | **已实现**（`workspace/scratch/<device_id>/`，`python3 -I`，超时与清环境） |
 
 ### 7.6 添加新 Skill
 
@@ -558,6 +560,10 @@ frontmatter 字段：
 | `TB_AGENT_MEMORY_RECALL_K` | `5` | 情节记忆召回条数 |
 | `TB_AGENT_MEMORY_LOOKBACK_DAYS` | `7` | 情节记忆回溯天数（不约束事实层） |
 | `TB_AGENT_FACTS_MAX` | `80` | 巩固事实条数上限 |
+| `TB_AGENT_TURN_TIMEOUT` | `120s` | 单轮 turn 超时（含多步 tool） |
+| `TB_AGENT_MAX_TOOL_ROUNDS` | `8` | tool 循环最大轮数 |
+| `TB_CODE_RUN_TIMEOUT` | `15s` | `code.run` 超时 |
+| `TB_CODE_PYTHON_BIN` | `python3` | Python 解释器路径 |
 | `TB_AGENT_DAILY_TOKEN_CAP` | `200000` | 每设备日 token 上限（in+out）；`0` = 不限制 |
 
 ### workspace 数据目录

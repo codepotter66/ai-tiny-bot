@@ -2,6 +2,7 @@ package agent
 
 import (
 	"testing"
+	"time"
 
 	"github.com/wisdomoasis/tiny-bot-cloud-agent/internal/config"
 	"github.com/wisdomoasis/tiny-bot-cloud-agent/internal/skills"
@@ -18,6 +19,10 @@ func testAgentCfg(maxChars int) config.AgentConfig {
 		MemoryLookbackDays:     7,
 		FactsMax:               80,
 		DailyTokenCapPerDevice: 200_000,
+		TurnTimeout:            120 * time.Second,
+		MaxToolRounds:          8,
+		CodeRunTimeout:         15 * time.Second,
+		CodePythonBin:          "python3",
 	}
 }
 

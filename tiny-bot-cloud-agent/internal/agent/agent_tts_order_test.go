@@ -97,6 +97,7 @@ type pcmCapturingSender struct {
 func (s *pcmCapturingSender) SendSTT(string, string)   {}
 func (s *pcmCapturingSender) SendText(string)          {}
 func (s *pcmCapturingSender) SendTool(string, string)  {}
+func (s *pcmCapturingSender) SendStatus(string, string, string, float64) {}
 func (s *pcmCapturingSender) SendDone()                { s.done = true }
 
 func (s *pcmCapturingSender) SendPCMBytes(_ uint32, pcm []byte) {

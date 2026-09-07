@@ -21,6 +21,7 @@
 | [`persona`](#persona) | 加载 SOUL/IDENTITY/AGENT/USER | `persona.go` |
 | [`memory`](#memory) | Markdown 长期记忆读写与召回 | `memory.go`, `markdown.go`, `recall.go` |
 | [`skills`](#skills) | 技能加载、注册、脚本执行 | `loader.go`, `registry.go`, `runner.go` |
+| [`codejail`](#codejail) | 设备 scratch 下受限写/跑 Python | `jail.go` |
 | [`llm`](#llm) | LLM 抽象、prompt、thinking 过滤 | `llm.go`, `prompt.go`, `openai_compat.go` |
 | [`asr`](#asr) | 语音转文字 | `asr.go`, `aliyun.go`, `mock.go` |
 | [`tts`](#tts) | 文字转语音 | `tts.go`, `minimax.go`, `aliyun.go` |
@@ -163,7 +164,7 @@ flowchart TB
 | `ClientMsg` / `ServerMsg` | 上下行消息体 |
 | `Session` | 连接状态；回调 `OnHello` / `OnTurn` / `OnInterrupt` / `OnClose` |
 
-**关键函数**：`Upgrade`、`NewSession`、`(*Session).Run`、`SendSTT` / `SendText` / `SendTool` / `SendPCMBytes` / `SendDone`。
+**关键函数**：`Upgrade`、`NewSession`、`(*Session).Run`、`SendSTT` / `SendText` / `SendTool` / `SendStatus` / `SendPCMBytes` / `SendDone`。
 
 **依赖**：`audio`（PCM 编解码）、`logging`。
 
@@ -171,6 +172,7 @@ flowchart TB
 
 - Turn 在 goroutine 中异步跑，不阻塞读循环；`interrupt` 调用 `turnCancel` 取消当前 LLM/TTS
 - `SendTool` 由 agent 工具循环在执行 skill 前触发
+- `SendStatus` 在每个 tool 前后发静默进度（`start` / `done` / `error`），不进 TTS；`Session.TurnTimeout` 由 `TB_AGENT_TURN_TIMEOUT` 注入
 - `Upgrade` 不校验 Origin（`InsecureSkipVerify`）；单帧上限约 1 MiB
 - 协议字段详见 `docs/firmware-integration/ws-protocol.schema.json`（[03-protocol.md](03-protocol.md) 计划中）
 
@@ -195,7 +197,7 @@ flowchart TB
 1. 日 token 限额检查 → ASR → `SendSTT`
 2. `Memory.Record(user)` + SQLite `AppendMessage` + `History.Append`
 3. `Memory.ListFacts` + `Memory.Recall`（读 `AgentCfg`）→ `resolveSoulMD` / `resolveUserMD` → `llm.BuildSystemPrompt`
-4. `runToolLoop`：解析 `tool_calls` → `SendTool` → `skills.Execute`（含 `memory.save`→`SaveFact`、`persona.save_*`→DB）→ 二次 LLM
+4. `runToolLoop`：解析 `tool_calls` → `SendStatus(start)` → `SendTool` → `skills.Execute`（含 `memory.save`→`SaveFact`、`persona.save_*`→DB、`code.write`/`code.run`→scratch）→ `SendStatus(done|error)` → 二次 LLM
 5. 单 worker 串行 TTS → `SendPCMBytes`
 6. `Memory.Record(assistant)` + 持久化 → `SendDone`
 
@@ -262,6 +264,20 @@ TodayPath(deviceID) string
 **依赖**：`llm`（`ToolDef`）。
 
 **注意**：agent 的 `runToolLoop` 会真正调用 `Execute`；内置 `memory.*` 优先于同名脚本 skill。SIGHUP 可热重载 skills 目录。
+
+---
+
+### codejail
+
+**职责**：在 `workspace/scratch/<device_id>/` 下校验文件名、写入 `.py`、用 `python3 -I` 超时执行；显式 Env（不继承 `TB_*`）。
+
+**关键类型**：`Jail`、`RunResult`。
+
+**关键函数**：`ValidateFilename`、`(*Jail).Write` / `Run`。
+
+**依赖**：标准库 `os/exec`。由 agent 内置 `code.write` / `code.run` 调用。
+
+**注意**：非安全沙箱（不断言断网）；仅靠路径约束、stdlib、清密钥与超时。
 
 ---
 

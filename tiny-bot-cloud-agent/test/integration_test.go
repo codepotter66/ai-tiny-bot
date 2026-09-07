@@ -56,7 +56,10 @@ func TestEndToEnd_Turn(t *testing.T) {
 
 	ag := agent.New(ps, mem, sk, hist, st, asrImpl, llmImpl, ttsImpl, config.MiniMaxConfig{}, config.AgentConfig{
 		MaxResponseChars: 200, HistoryTurns: 10, MemoryRecallK: 5, MemoryLookbackDays: 7, FactsMax: 80,
+		TurnTimeout: 120 * time.Second, MaxToolRounds: 8,
+		CodeRunTimeout: 15 * time.Second, CodePythonBin: "python3",
 	})
+	ag.WorkspaceRoot = t.TempDir()
 
 	// 1) 加一个 user + device
 	require.NoError(t, st.CreateUser(ctx, &store.User{ID: "u1", DisplayName: "test"}))
@@ -117,6 +120,7 @@ func (r *recordingSender) SendSTT(s, lang string)              { r.stt = s; r.st
 func (r *recordingSender) SendText(s string)                      { r.text += s }
 func (r *recordingSender) SendPCMBytes(seq uint32, b []byte)      { r.pcmBytes += len(b) }
 func (r *recordingSender) SendTool(name, args string)             { r.tool = name }
+func (r *recordingSender) SendStatus(string, string, string, float64) {}
 func (r *recordingSender) SendDone()                              { r.done = true }
 
 func readFile(p string) ([]byte, error) {

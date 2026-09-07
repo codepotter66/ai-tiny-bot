@@ -208,7 +208,9 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		s.deps.Cfg.MiniMax,
 		s.deps.Cfg.Agent,
 	)
+	ag.WorkspaceRoot = s.deps.Cfg.Storage.WorkspaceRoot
 	sess := ws.NewSession(conn)
+	sess.TurnTimeout = s.deps.Cfg.Agent.TurnTimeout
 	ag.Bind(sess, s.deps.Auth.VerifyToken)
 	slog.Info("ws connected", "remote", r.RemoteAddr)
 	sess.Run()

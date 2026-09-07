@@ -149,12 +149,15 @@ ESP32 端拿到 I2S 麦克风的 `int16_t` 数组后，**直接当作字节流 b
 服务端会按顺序发：
 
 1. `{"type": "stt", "text": "<用户说的话>"}`（STT 识别结果）
-2. `{"type": "text", "text": "嗯"}`（LLM 第一个 token，可能很多个）
-3. `{"type": "text", "text": "，"}`
-4. ...（持续约 1-3 秒）
-5. `{"type": "audio", "seq": 1, "data": "<base64 PCM>"}`（TTS 第一个 chunk）
-6. `{"type": "audio", "seq": 2, ...}`（更多 TTS chunk，可能多个）
-7. `{"type": "done"}`（turn 结束）
+2. （可选）若触发 tool：`{"type":"status","step":"…","phase":"start","text":"查询天气"}` 等静默进度；可穿插 `tool`
+3. `{"type": "text", "text": "嗯"}`（LLM 最终可见回复的 token，可能很多个）
+4. `{"type": "text", "text": "，"}`
+5. ...（持续约 1-3 秒）
+6. `{"type": "audio", "seq": 1, "data": "<base64 PCM>"}`（TTS 第一个 chunk）
+7. `{"type": "audio", "seq": 2, ...}`（更多 TTS chunk，可能多个）
+8. `{"type": "done"}`（turn 结束）
+
+**`status` 消息**：单轮 turn 内任务步骤进度（`phase`=`start`/`running`/`done`/`error`）。**不触发 TTS**，固件应用 `text`（建议 ≤21 字符）更新 OLED。旧固件可忽略未知 type。
 
 固件收到 `audio` 后：
 - base64 解码 → 喂给 I2S 功放（DMA buffer）

@@ -5,19 +5,29 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
+	"github.com/wisdomoasis/tiny-bot-cloud-agent/internal/codejail"
 	"github.com/wisdomoasis/tiny-bot-cloud-agent/internal/llm"
 	"github.com/wisdomoasis/tiny-bot-cloud-agent/internal/logging"
 	"github.com/wisdomoasis/tiny-bot-cloud-agent/internal/skills"
 	"github.com/wisdomoasis/tiny-bot-cloud-agent/internal/store"
 	"github.com/wisdomoasis/tiny-bot-cloud-agent/internal/tts"
+	"github.com/wisdomoasis/tiny-bot-cloud-agent/internal/ws"
 )
 
-const maxToolRounds = 3
+const defaultMaxToolRounds = 8
 
 type toolExecutor struct {
 	agent    *Agent
 	deviceID string
+}
+
+func (a *Agent) maxToolRounds() int {
+	if a.AgentCfg.MaxToolRounds > 0 {
+		return a.AgentCfg.MaxToolRounds
+	}
+	return defaultMaxToolRounds
 }
 
 func (a *Agent) runToolLoop(
@@ -31,8 +41,9 @@ func (a *Agent) runToolLoop(
 ) (string, int, int, error) {
 	exec := &toolExecutor{agent: a, deviceID: deviceID}
 	var totalIn, totalOut int
+	maxRounds := a.maxToolRounds()
 
-	for round := 0; round < maxToolRounds; round++ {
+	for round := 0; round < maxRounds; round++ {
 		var result llm.StreamResult
 		filter := llm.NewStreamThinkingFilter()
 		streamed := false
@@ -67,8 +78,14 @@ func (a *Agent) runToolLoop(
 			}
 			msgs = append(msgs, assistant)
 			for _, tc := range result.ToolCalls {
+				send.SendStatus(tc.Name, ws.StatusStart, statusStartText(tc.Name), 0)
 				send.SendTool(tc.Name, tc.Arguments)
-				out, _ := exec.runOne(ctx, tc)
+				out, execErr := exec.runOne(ctx, tc)
+				if execErr != nil {
+					send.SendStatus(tc.Name, ws.StatusError, statusErrorText(tc.Name), -1)
+				} else {
+					send.SendStatus(tc.Name, ws.StatusDone, statusDoneText(tc.Name), 1)
+				}
 				msgs = append(msgs, llm.Message{
 					Role:    llm.RoleTool,
 					Name:    tc.ID,
@@ -92,7 +109,7 @@ func (a *Agent) runToolLoop(
 		}
 		return strings.TrimSpace(result.Content), totalIn, totalOut, nil
 	}
-	return "", totalIn, totalOut, fmt.Errorf("tool loop exceeded %d rounds", maxToolRounds)
+	return "", totalIn, totalOut, fmt.Errorf("tool loop exceeded %d rounds", maxRounds)
 }
 
 func (e *toolExecutor) runOne(ctx context.Context, tc llm.ToolCall) (string, error) {
@@ -101,9 +118,68 @@ func (e *toolExecutor) runOne(ctx context.Context, tc llm.ToolCall) (string, err
 	out, err := reg.Execute(ctx, tc.Name, tc.Arguments)
 	if err != nil {
 		logger.Warn("tool failed", "tool", tc.Name, "err", err)
-		return fmt.Sprintf("工具 %s 执行失败: %s", tc.Name, err.Error()), nil
+		return fmt.Sprintf("工具 %s 执行失败: %s", tc.Name, err.Error()), err
 	}
 	return strings.TrimSpace(out), nil
+}
+
+func statusStartText(toolName string) string {
+	switch toolName {
+	case "memory.save":
+		return "记住中"
+	case "memory.recall":
+		return "回忆中"
+	case "persona.save_soul":
+		return "更新人设"
+	case "persona.save_user":
+		return "更新画像"
+	case "weather":
+		return "查询天气"
+	case "code.write":
+		return "写代码"
+	case "code.run":
+		return "运行中"
+	default:
+		return truncateOLED(toolName)
+	}
+}
+
+func statusDoneText(toolName string) string {
+	switch toolName {
+	case "memory.save":
+		return "已记住"
+	case "memory.recall":
+		return "回忆完成"
+	case "persona.save_soul", "persona.save_user":
+		return "已更新"
+	case "weather":
+		return "查询完成"
+	case "code.write":
+		return "已写好"
+	case "code.run":
+		return "运行完成"
+	default:
+		return "完成"
+	}
+}
+
+func statusErrorText(toolName string) string {
+	switch toolName {
+	case "code.run":
+		return "运行失败"
+	default:
+		base := statusStartText(toolName)
+		return truncateOLED(base + "失败")
+	}
+}
+
+func truncateOLED(s string) string {
+	const maxRunes = 21
+	if utf8.RuneCountInString(s) <= maxRunes {
+		return s
+	}
+	runes := []rune(s)
+	return string(runes[:maxRunes])
 }
 
 func (a *Agent) registerMemoryBuiltins(reg *skills.Registry, deviceID string, now time.Time) {
@@ -196,6 +272,90 @@ func (a *Agent) registerPersonaBuiltins(reg *skills.Registry, deviceID string) {
 				return "", err
 			}
 			return "用户画像已更新。", nil
+		},
+	})
+}
+
+func (a *Agent) codeJail() *codejail.Jail {
+	bin := a.AgentCfg.CodePythonBin
+	if strings.TrimSpace(bin) == "" {
+		bin = codejail.DefaultPython
+	}
+	timeout := a.AgentCfg.CodeRunTimeout
+	if timeout <= 0 {
+		timeout = codejail.DefaultTimeout
+	}
+	return &codejail.Jail{
+		WorkspaceRoot: a.WorkspaceRoot,
+		PythonBin:     bin,
+		Timeout:       timeout,
+		MaxFileBytes:  codejail.MaxFileBytes,
+	}
+}
+
+func (a *Agent) registerCodeBuiltins(reg *skills.Registry, deviceID string) {
+	jail := a.codeJail()
+	_ = reg.AddBuiltin(&skills.Builtin{
+		Name:        "code.write",
+		Description: "把 Python 源码写入本设备受限 scratch 目录（仅 stdlib，文件名须为 *.py，无路径）。需要运行时再调 code.run。",
+		Parameters: map[string]skills.Param{
+			"filename": {Type: "string", Description: "文件名，例如 calc.py（不可含 / 或 ..）", Required: true},
+			"content":  {Type: "string", Description: "完整 Python 源码", Required: true},
+		},
+		Handler: func(_ context.Context, args map[string]interface{}) (string, error) {
+			filename, _ := args["filename"].(string)
+			content, _ := args["content"].(string)
+			filename = strings.TrimSpace(filename)
+			if filename == "" {
+				return "", fmt.Errorf("filename required")
+			}
+			if a.WorkspaceRoot == "" {
+				return "", fmt.Errorf("workspace root not configured")
+			}
+			name, err := jail.Write(deviceID, filename, content)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("已写入 %s（%d 字节）。用 code.run 执行。", name, len(content)), nil
+		},
+	})
+	_ = reg.AddBuiltin(&skills.Builtin{
+		Name:        "code.run",
+		Description: "在受限目录执行先前 code.write 写入的 Python 文件（仅 stdlib，超时杀掉，不继承服务器密钥）。",
+		Parameters: map[string]skills.Param{
+			"filename": {Type: "string", Description: "要执行的 *.py 文件名", Required: true},
+		},
+		Handler: func(ctx context.Context, args map[string]interface{}) (string, error) {
+			filename, _ := args["filename"].(string)
+			filename = strings.TrimSpace(filename)
+			if filename == "" {
+				return "", fmt.Errorf("filename required")
+			}
+			if a.WorkspaceRoot == "" {
+				return "", fmt.Errorf("workspace root not configured")
+			}
+			res, err := jail.Run(ctx, deviceID, filename)
+			if err != nil {
+				return "", err
+			}
+			var b strings.Builder
+			if res.TimedOut {
+				fmt.Fprintf(&b, "超时（已杀掉）。\n")
+			} else {
+				fmt.Fprintf(&b, "exit_code=%d\n", res.ExitCode)
+			}
+			if res.Stdout != "" {
+				fmt.Fprintf(&b, "stdout:\n%s\n", res.Stdout)
+			}
+			if res.Stderr != "" {
+				fmt.Fprintf(&b, "stderr:\n%s\n", res.Stderr)
+			}
+			out := strings.TrimSpace(b.String())
+			if out == "" {
+				out = "exit_code=0（无输出）"
+			}
+			// 非零退出仍把结果交给 LLM（不返回 error），便于它解释报错
+			return out, nil
 		},
 	})
 }

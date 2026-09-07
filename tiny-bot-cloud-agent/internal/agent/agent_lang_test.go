@@ -26,6 +26,7 @@ type langSender struct {
 func (s *langSender) SendSTT(text, lang string)         { s.stt = text; s.sttLang = lang }
 func (s *langSender) SendText(string)                   {}
 func (s *langSender) SendTool(string, string)           {}
+func (s *langSender) SendStatus(string, string, string, float64) {}
 func (s *langSender) SendPCMBytes(uint32, []byte)       { s.pcm++ }
 func (s *langSender) SendDone()                         { s.done = true }
 

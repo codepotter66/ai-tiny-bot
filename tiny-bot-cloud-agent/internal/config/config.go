@@ -102,6 +102,10 @@ type AgentConfig struct {
 	MemoryLookbackDays     int
 	FactsMax               int
 	DailyTokenCapPerDevice int
+	TurnTimeout            time.Duration // 单轮 turn 超时，默认 120s
+	MaxToolRounds          int           // tool 循环上限，默认 8
+	CodeRunTimeout         time.Duration // code.run 超时，默认 15s
+	CodePythonBin          string        // python 解释器，默认 python3
 }
 
 type LoggingConfig struct {
@@ -178,6 +182,10 @@ func defaults() *Config {
 			MemoryLookbackDays:     7,
 			FactsMax:               80,
 			DailyTokenCapPerDevice: 200_000,
+			TurnTimeout:            120 * time.Second,
+			MaxToolRounds:          8,
+			CodeRunTimeout:         15 * time.Second,
+			CodePythonBin:          "python3",
 		},
 		Logging: LoggingConfig{
 			Level:  "info",
@@ -354,6 +362,24 @@ func overlayEnv(c *Config) {
 			c.Agent.DailyTokenCapPerDevice = n
 		}
 	}
+	if v := os.Getenv("TB_AGENT_TURN_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			c.Agent.TurnTimeout = d
+		}
+	}
+	if v := os.Getenv("TB_AGENT_MAX_TOOL_ROUNDS"); v != "" {
+		if n, err := parseInt(v); err == nil {
+			c.Agent.MaxToolRounds = n
+		}
+	}
+	if v := os.Getenv("TB_CODE_RUN_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			c.Agent.CodeRunTimeout = d
+		}
+	}
+	if v := os.Getenv("TB_CODE_PYTHON_BIN"); v != "" {
+		c.Agent.CodePythonBin = v
+	}
 
 	if v := os.Getenv("TB_LOG_LEVEL"); v != "" {
 		c.Logging.Level = v
@@ -479,6 +505,18 @@ func (c *Config) Validate() error {
 	if c.Agent.FactsMax <= 0 {
 		errs = append(errs, "agent.facts_max must be > 0")
 	}
+	if c.Agent.TurnTimeout <= 0 {
+		errs = append(errs, "agent.turn_timeout must be > 0")
+	}
+	if c.Agent.MaxToolRounds <= 0 {
+		errs = append(errs, "agent.max_tool_rounds must be > 0")
+	}
+	if c.Agent.CodeRunTimeout <= 0 {
+		errs = append(errs, "agent.code_run_timeout must be > 0")
+	}
+	if strings.TrimSpace(c.Agent.CodePythonBin) == "" {
+		errs = append(errs, "agent.code_python_bin required")
+	}
 
 	if len(errs) > 0 {
 		return fmt.Errorf("config invalid:\n  - %s", strings.Join(errs, "\n  - "))
@@ -551,6 +589,10 @@ func (c *Config) SafeView() map[string]any {
 			"memory_lookback_days": c.Agent.MemoryLookbackDays,
 			"facts_max":            c.Agent.FactsMax,
 			"daily_token_cap":      c.Agent.DailyTokenCapPerDevice,
+			"turn_timeout":         c.Agent.TurnTimeout.String(),
+			"max_tool_rounds":      c.Agent.MaxToolRounds,
+			"code_run_timeout":     c.Agent.CodeRunTimeout.String(),
+			"code_python_bin":      c.Agent.CodePythonBin,
 		},
 		"logging": map[string]any{
 			"level":  c.Logging.Level,

@@ -29,6 +29,7 @@ type Sender interface {
 	SendSTT(text, lang string)
 	SendText(string)
 	SendTool(name, args string)
+	SendStatus(step, phase, text string, progress float64)
 	SendPCMBytes(seq uint32, pcm []byte)
 	SendDone()
 }
@@ -45,6 +46,7 @@ type Agent struct {
 	Store         *store.Store
 	VoiceProfiles config.MiniMaxConfig
 	AgentCfg      config.AgentConfig
+	WorkspaceRoot string // workspace 根；code.write/run 的 scratch 在此下
 
 	SeqCounter *uint32 // 单调递增的 audio chunk 序号
 	seqMu      sync.Mutex
@@ -154,6 +156,7 @@ func (a *Agent) Turn(ctx context.Context, deviceID string, pcm []byte, send Send
 	reg := a.skills()
 	a.registerMemoryBuiltins(reg, deviceID, now)
 	a.registerPersonaBuiltins(reg, deviceID)
+	a.registerCodeBuiltins(reg, deviceID)
 	tools := reg.ToolDefs()
 
 	sys := llm.BuildSystemPrompt(&llm.PersonaInputs{
