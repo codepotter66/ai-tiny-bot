@@ -7,6 +7,11 @@
         "failClosed": true
       }
     ],
+    "afterFileEdit": [
+      {
+        "command": "bash .cursor/hooks/track-edit.sh"
+      }
+    ],
     "stop": [
       {
         "command": "bash .cursor/hooks/ship-on-stop.sh",

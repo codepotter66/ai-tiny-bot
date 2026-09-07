@@ -24,16 +24,30 @@ When a task finishes with file changes, the project `stop` hook
 1. **Changelog** — append one bullet under `[Unreleased]` in the package you changed:
    - `tiny-bot-cloud-agent/CHANGELOG.md`
    - `tiny-bot-firmware/CHANGELOG.md`
-   - Root / `docs/` / `.cursor/` changes do **not** get a root changelog; update this `AGENTS.md` instead.
+   - Root / `.cursor/` workflow changes do **not** get a root changelog; update this `AGENTS.md` instead.
+   - Hardware guides under `docs/` alone do **not** require an `AGENTS.md` bump.
 2. **Agent docs** — update `AGENTS.md` and/or the package `CLAUDE.md` only when
-   developer conventions, commands, layout, or durable workflow changed.
-   Do **not** treat them as a second changelog for routine bugfixes.
+   developer conventions, commands, layout, or durable workflow changed
+   (e.g. `.cursor/hooks`, rules). Do **not** treat them as a second changelog for
+   routine bugfixes or product/human docs.
 3. **Commit** — English subject (why) + English body via HEREDOC. Never `--no-verify`.
-   Stage only files for this task (`git add -A` is discouraged).
+   Stage only files for this task (`git add -A` is discouraged). Leave unrelated WIP unstaged.
 4. **Push** — `git push -u origin HEAD` on a **feature branch**. Never push `main`/`master`, never force-push.
+
+`afterFileEdit` records session edit paths under `.cursor/hooks/state/` (gitignored).
+`ship-on-stop` only checks **this session's** edits, not pre-existing dirty files.
 
 Hard gates live in `.cursor/hooks/git-pr-guard.sh` (before shell): no force-push,
 no commit/push on main, no `--no-verify`, and a secrets scan of staged diffs / commit messages.
+
+## Git remote (codepotter66)
+
+This repo uses the `codepotter66` GitHub account. Remote should stay:
+
+`git@github.com-codepotter66:codepotter66/ai-tiny-bot.git`
+
+Use SSH key `~/.ssh/id_ed25519_codepotter66` (Host `github.com-codepotter66` in `~/.ssh/config`).
+Do not push with other GitHub identities.
 
 ## Secrets — never commit or push
 

@@ -14,4 +14,6 @@ Before ending a task that modified files:
 4. `git push -u origin HEAD` on a feature branch. Never push `main`/`master`, never force-push, never `--no-verify`.
 5. Never commit secrets: `.env`, passwords, API keys, real public IPs/ports, `tiny-bot-firmware/include/config.h`, `*.pem`/`*.key`.
 
-The `stop` hook (`.cursor/hooks/ship-on-stop.sh`) will follow up if docs or push are missing. Prefer finishing the checklist yourself before the first stop.
+The `stop` hook (`.cursor/hooks/ship-on-stop.sh`) only checks files edited in **this**
+agent session (tracked via `afterFileEdit`). Prefer finishing the checklist yourself
+before the first stop. Leave unrelated WIP unstaged.
