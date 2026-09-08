@@ -98,6 +98,7 @@ void onTTS(const int16_t* pcm, size_t n);
 void onDone();
 void onCloudError(const String& code, const String& msg);
 void onTool(const String& tool, const String& args);
+void onStatus(const String& step, const String& phase, const String& text);
 void onCloudReady();
 void onCloudDisconnected();
 
@@ -364,6 +365,7 @@ void onCloudError(const String& code, const String& msg) {
 void onTool(const String& tool, const String& args) {
   Serial.printf("[main] TOOL %s %s\n", tool.c_str(), args.c_str());
   (void)args;
+  // OLED 优先由 status 更新；无 status 时兜底显示 tool 名
   if (turnActive_ || fsm == FsmState::IDLE) {
     String s = "Tool:" + tool;
     if (s.length() > 21) s = s.substring(0, 21);
@@ -374,6 +376,25 @@ void onTool(const String& tool, const String& args) {
     oledFaceSet(m, s.c_str());
     oledFaceTick(millis());
   }
+}
+
+void onStatus(const String& step, const String& phase, const String& text) {
+  Serial.printf("[main] STATUS step=%s phase=%s text=%s\n",
+                step.c_str(), phase.c_str(), text.c_str());
+  (void)step;
+  (void)phase;
+  if (!(turnActive_ || fsm == FsmState::WAITING || fsm == FsmState::IDLE)) {
+    return;
+  }
+  String s = text;
+  if (s.isEmpty()) return;
+  if (s.length() > 21) s = s.substring(0, 21);
+  FaceMood m = FaceMood::Think;
+  if (fsm == FsmState::IDLE) m = FaceMood::Idle;
+  else if (fsm == FsmState::PLAYING) m = FaceMood::Happy;
+  else if (fsm == FsmState::RECORD) m = FaceMood::Listen;
+  oledFaceSet(m, s.c_str());
+  oledFaceTick(millis());
 }
 
 void onCloudReady() {
@@ -425,6 +446,7 @@ void setup() {
   cloud.onDone(onDone);
   cloud.onError(onCloudError);
   cloud.onTool(onTool);
+  cloud.onStatus(onStatus);
   cloud.onReady(onCloudReady);
   cloud.onDisconnected(onCloudDisconnected);
 

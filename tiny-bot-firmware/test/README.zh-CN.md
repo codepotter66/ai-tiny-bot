@@ -20,6 +20,7 @@ pio device monitor --baud 115200
 - **step1_blink.cpp**: 输出 "LED ON" / "LED OFF"
 - **step2_oled.cpp**: 输出 "OLED init OK!" 或错误信息
 - **step3_audio.cpp**: 输出麦克风音量数值
+- **完整固件 main**：先有 `[cloud] << status step=… phase=… text=…`，再有 `[main] STATUS …`；WAITING 时 OLED 显示 `text`（最多 21 字）
 
 ### 3. 观察硬件行为
 

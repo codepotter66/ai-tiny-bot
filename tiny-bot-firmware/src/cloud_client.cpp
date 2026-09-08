@@ -460,6 +460,13 @@ void CloudClient::handleTextMessage(const String& msg) {
     }
     Serial.printf("[cloud] << tool: %s args=%s\n", tool.c_str(), args.c_str());
     if (onTool_) onTool_(tool, args);
+  } else if (strcmp(type, "status") == 0) {
+    String step = doc["step"] | "";
+    String phase = doc["phase"] | "";
+    String text = doc["text"] | "";
+    Serial.printf("[cloud] << status step=%s phase=%s text=%s\n",
+                  step.c_str(), phase.c_str(), text.c_str());
+    if (onStatus_) onStatus_(step, phase, text);
   } else if (strcmp(type, "pong") == 0) {
     // noteServerMsg already called
   } else {

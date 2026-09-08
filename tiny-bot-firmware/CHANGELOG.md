@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **WebSocket `status` 进度回调**：`CloudClient` 解析下行 `type=status`（`step`/`phase`/`text`），经 `OnStatus` 回调；`main` 在 WAITING 等状态用 `text`（截断 21 字符）更新 OLED。用于展示 agent 多步 tool 进度且不触发 TTS；`tool` 仍作无 `status` 时的兜底显示。
+
 ### Fixed
 
 - **`Makefile` 找不到 `pio`**：`PIO` 不再写死为 `pio`，会依次查找 PATH 中的 `pio` / `platformio`，以及 `~/.platformio/penv/bin/pio`；均未找到时给出安装提示。避免仅装了 PlatformIO IDE、CLI 未进 PATH 时 `make audio` / `make main` 直接失败。
@@ -11,6 +15,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **测试说明补 `status` 串口口径**：`test/README.md` / `README.zh-CN.md` 写明完整固件应出现 `[cloud] << status` 与 `[main] STATUS`，OLED 显示 `text`（最多 21 字）
 - **`README.md` 快速开始**：补充 PlatformIO CLI 常见路径、将 CLI 加入 PATH 的写法，以及「不改 PATH 可直接 `make …`」的说明；烧录示例增加 `make audio`。
 - **`step3_audio` 实时回放**：麦克风 → 喇叭 loopback（16-bit 直读）；启动提示音；`LOOPBACK_GAIN` 默认 2。
 - **文档补充 `seed` 含义**：`seed` 是云端预登记设备（入场许可），不是立刻上线；未 seed 会导致 provision 401 / OLED Reconnecting。

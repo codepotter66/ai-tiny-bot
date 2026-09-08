@@ -7,7 +7,7 @@
  *   1. 启动时从 NVS 取 token；如果没有，调用 HTTP /provision 拿
  *   2. 打开 WebSocket 到云端，发 hello
  *   3. 提供 sendAudio / sendEnd / sendInterrupt / sendPing 接口
- *   4. 通过回调通知 STT / LLM / TTS / done / error / tool
+ *   4. 通过回调通知 STT / LLM / TTS / done / error / tool / status
  *   5. 断线退避重连、ping/pong 空闲检测、AUTH_FAIL force 重配网
  *
  * 外部在 loop() 里周期性调用 poll() 即可。
@@ -32,6 +32,7 @@ class CloudClient {
   using OnDone = std::function<void()>;
   using OnError = std::function<void(const String& code, const String& msg)>;
   using OnTool = std::function<void(const String& tool, const String& args)>;
+  using OnStatus = std::function<void(const String& step, const String& phase, const String& text)>;
   using OnReady = std::function<void()>;
   using OnDisconnected = std::function<void()>;
 
@@ -75,6 +76,7 @@ class CloudClient {
   void onDone(OnDone cb) { onDone_ = cb; }
   void onError(OnError cb) { onError_ = cb; }
   void onTool(OnTool cb) { onTool_ = cb; }
+  void onStatus(OnStatus cb) { onStatus_ = cb; }
   void onReady(OnReady cb) { onReady_ = cb; }
   void onDisconnected(OnDisconnected cb) { onDisconnected_ = cb; }
 
@@ -115,6 +117,7 @@ class CloudClient {
   OnDone onDone_;
   OnError onError_;
   OnTool onTool_;
+  OnStatus onStatus_;
   OnReady onReady_;
   OnDisconnected onDisconnected_;
 
