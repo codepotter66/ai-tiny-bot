@@ -15,12 +15,24 @@ import (
 type MarkdownStore struct {
 	workspaceRoot string
 	indexer       MemoryIndexer
+	searcher      MemorySearcher
 	mu            sync.Mutex // 串行化写同一个文件
 }
 
 // MemoryIndexer 可选的记忆索引后端（如 SQLite memory_index）。
 type MemoryIndexer interface {
 	IndexMemoryLine(ctx context.Context, deviceID, date string, lineNo int, tsMs int64, content string) error
+}
+
+// IndexHit 索引召回的一行位置（1-based 行号）。
+type IndexHit struct {
+	Date string
+	Line int
+}
+
+// MemorySearcher 用索引缩小 Recall 扫描范围。
+type MemorySearcher interface {
+	SearchMemory(ctx context.Context, deviceID, query string, lookbackDays int) ([]IndexHit, error)
 }
 
 // NewMarkdownStore 构造一个 MarkdownStore。
@@ -31,6 +43,11 @@ func NewMarkdownStore(workspaceRoot string) *MarkdownStore {
 // SetIndexer 注入可选索引器（Record 时同步写入）。
 func (s *MarkdownStore) SetIndexer(idx MemoryIndexer) {
 	s.indexer = idx
+	if sr, ok := idx.(MemorySearcher); ok {
+		s.searcher = sr
+	} else {
+		s.searcher = nil
+	}
 }
 
 // Record 追加一行到 workspace/memory/<device>/YYYY-MM-DD.md
@@ -89,8 +106,54 @@ func (s *MarkdownStore) Record(ctx context.Context, deviceID, kind, content stri
 }
 
 // Recall 召回 top-k 片段。
-// 实现：扫描 device 目录下最近 lookbackDays 的 .md 文件，每行打 keyword × 0.6 + recency × 0.4。
+// 有 SearchMemory 且命中非空时只打分索引行；否则扫描最近 lookbackDays 的 .md。
 func (s *MarkdownStore) Recall(ctx context.Context, deviceID, query string, lookbackDays, k int) ([]Snippet, error) {
+	if s.searcher != nil {
+		hits, err := s.searcher.SearchMemory(ctx, deviceID, query, lookbackDays)
+		if err == nil && len(hits) > 0 {
+			return s.recallFromHits(deviceID, query, hits, k)
+		}
+	}
+	return s.recallScanFiles(deviceID, query, lookbackDays, k)
+}
+
+func (s *MarkdownStore) recallFromHits(deviceID, query string, hits []IndexHit, k int) ([]Snippet, error) {
+	queryKW := tokenize(query)
+	now := time.Now()
+	dir := deviceDir(s.workspaceRoot, deviceID)
+	var scored []Snippet
+	seen := map[string]struct{}{}
+	for _, h := range hits {
+		key := h.Date + ":" + fmt.Sprintf("%d", h.Line)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		line, ok := readFileLine(filepath.Join(dir, h.Date+".md"), h.Line)
+		if !ok {
+			continue
+		}
+		score := scoreLine(queryKW, line, now)
+		if score <= 0 {
+			continue
+		}
+		d, err := time.Parse("2006-01-02", h.Date)
+		ts := int64(0)
+		if err == nil {
+			ts = d.UnixMilli()
+		}
+		scored = append(scored, Snippet{
+			Date:    h.Date,
+			Line:    h.Line,
+			TSMs:    ts,
+			Content: line,
+			Score:   score,
+		})
+	}
+	return topKSnippets(scored, k), nil
+}
+
+func (s *MarkdownStore) recallScanFiles(deviceID, query string, lookbackDays, k int) ([]Snippet, error) {
 	dir := deviceDir(s.workspaceRoot, deviceID)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -109,11 +172,9 @@ func (s *MarkdownStore) Recall(ctx context.Context, deviceID, query string, look
 			continue
 		}
 		date := strings.TrimSuffix(e.Name(), ".md")
-		// 简单日期校验
 		if _, err := time.Parse("2006-01-02", date); err != nil {
 			continue
 		}
-		// lookback 过滤
 		d, _ := time.Parse("2006-01-02", date)
 		if int(now.Sub(d).Hours()/24) > lookbackDays {
 			continue
@@ -146,8 +207,10 @@ func (s *MarkdownStore) Recall(ctx context.Context, deviceID, query string, look
 		}
 		f.Close()
 	}
+	return topKSnippets(scored, k), nil
+}
 
-	// 排序 + 取 top-k
+func topKSnippets(scored []Snippet, k int) []Snippet {
 	for i := 0; i < len(scored); i++ {
 		for j := i + 1; j < len(scored); j++ {
 			if scored[j].Score > scored[i].Score {
@@ -158,7 +221,24 @@ func (s *MarkdownStore) Recall(ctx context.Context, deviceID, query string, look
 	if k > 0 && len(scored) > k {
 		scored = scored[:k]
 	}
-	return scored, nil
+	return scored
+}
+
+func readFileLine(path string, lineNo int) (string, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+	scan := bufio.NewScanner(f)
+	n := 0
+	for scan.Scan() {
+		n++
+		if n == lineNo {
+			return scan.Text(), true
+		}
+	}
+	return "", false
 }
 
 // TodayPath 返回 device 今天的文件路径（不保证存在）。

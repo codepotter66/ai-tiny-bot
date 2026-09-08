@@ -14,6 +14,7 @@ import (
 	"github.com/wisdomoasis/tiny-bot-cloud-agent/internal/llm"
 	"github.com/wisdomoasis/tiny-bot-cloud-agent/internal/memory"
 	"github.com/wisdomoasis/tiny-bot-cloud-agent/internal/persona"
+	"github.com/wisdomoasis/tiny-bot-cloud-agent/internal/skills"
 	"github.com/wisdomoasis/tiny-bot-cloud-agent/internal/store"
 	"github.com/wisdomoasis/tiny-bot-cloud-agent/internal/tts"
 )
@@ -220,4 +221,201 @@ func TestTurn_PersonaSaveSoul(t *testing.T) {
 	assert.Contains(t, u.SoulMD, "小星星")
 
 	assert.Contains(t, ag.resolveSoulMD(ctx, "dev-persona", "default-soul"), "小星星")
+}
+
+type personaSaveUserLLM struct {
+	round int
+}
+
+func (m *personaSaveUserLLM) Name() string { return "persona-save-user-llm" }
+
+func (m *personaSaveUserLLM) Chat(_ context.Context, _ []llm.Message, _ []llm.ToolDef, _ llm.OnToken, result *llm.StreamResult) error {
+	m.round++
+	if result == nil {
+		return nil
+	}
+	if m.round == 1 {
+		result.FinishReason = "tool_calls"
+		result.ToolCalls = []llm.ToolCall{{
+			ID: "c1", Name: "persona.save_user", Arguments: `{"content":"# USER\n- 称呼: 小凯"}`,
+		}}
+		return nil
+	}
+	result.FinishReason = "stop"
+	result.Content = "好，以后叫你小凯。"
+	return nil
+}
+
+func TestTurn_PersonaSaveUser(t *testing.T) {
+	ctx := context.Background()
+	workspaceRoot, err := filepath.Abs("../../workspace")
+	require.NoError(t, err)
+	ps, err := persona.NewReloader(workspaceRoot)
+	require.NoError(t, err)
+	mem := memory.NewMarkdownStore(t.TempDir())
+	sk := mustSkillsReloader(t, workspaceRoot)
+	hist := NewHistoryRegistry(5)
+
+	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "user.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = st.Close() })
+	require.NoError(t, st.CreateUser(ctx, &store.User{ID: "u1", DisplayName: "默认"}))
+	require.NoError(t, st.CreateDevice(ctx, &store.Device{
+		ID: "dev-user", UserID: "u1", PairingCode: "TEST-0002", Status: "unbound",
+	}))
+	require.NoError(t, st.BindDevice(ctx, "dev-user", "hash"))
+
+	ag := New(ps, mem, sk, hist, st,
+		asr.NewMock("我叫小凯，请更新我的画像"),
+		&personaSaveUserLLM{},
+		tts.NewMock(),
+		config.MiniMaxConfig{},
+		testAgentCfg(600),
+	)
+
+	send := &toolSender{}
+	require.NoError(t, ag.Turn(ctx, "dev-user", []byte("pcm"), send))
+	assert.Equal(t, "persona.save_user", send.toolName)
+
+	u, err := st.GetUser(ctx, "u1")
+	require.NoError(t, err)
+	assert.Contains(t, u.UserMD, "小凯")
+	assert.Contains(t, ag.resolveUserMD(ctx, "dev-user", "default-user"), "小凯")
+}
+
+type soulSkipThenSaveLLM struct {
+	round int
+}
+
+func (m *soulSkipThenSaveLLM) Name() string { return "soul-skip-llm" }
+
+func (m *soulSkipThenSaveLLM) Chat(_ context.Context, _ []llm.Message, _ []llm.ToolDef, _ llm.OnToken, result *llm.StreamResult) error {
+	m.round++
+	if result == nil {
+		return nil
+	}
+	switch m.round {
+	case 1:
+		result.FinishReason = "stop"
+		result.Content = "好呀，以后叫小星星。"
+	case 2:
+		result.FinishReason = "tool_calls"
+		result.ToolCalls = []llm.ToolCall{{
+			ID: "c1", Name: "persona.save_soul", Arguments: `{"content":"# SOUL\n- 名字: 小星星"}`,
+		}}
+	default:
+		result.FinishReason = "stop"
+		result.Content = "已经改好了，我叫小星星。"
+	}
+	return nil
+}
+
+func TestWantsSoulSave(t *testing.T) {
+	assert.True(t, wantsSoulSave("以后叫你小星星"))
+	assert.True(t, wantsSoulSave("把你的名字改成豆豆"))
+	assert.False(t, wantsSoulSave("今天天气怎么样"))
+}
+
+func TestTurn_SoulSkipThenRetry(t *testing.T) {
+	ctx := context.Background()
+	workspaceRoot, err := filepath.Abs("../../workspace")
+	require.NoError(t, err)
+	ps, err := persona.NewReloader(workspaceRoot)
+	require.NoError(t, err)
+	mem := memory.NewMarkdownStore(t.TempDir())
+	sk := mustSkillsReloader(t, workspaceRoot)
+	hist := NewHistoryRegistry(5)
+
+	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "soul-retry.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = st.Close() })
+	require.NoError(t, st.CreateUser(ctx, &store.User{ID: "u1", DisplayName: "小明"}))
+	require.NoError(t, st.CreateDevice(ctx, &store.Device{
+		ID: "dev-retry", UserID: "u1", PairingCode: "TEST-0003", Status: "unbound",
+	}))
+	require.NoError(t, st.BindDevice(ctx, "dev-retry", "hash"))
+
+	ag := New(ps, mem, sk, hist, st,
+		asr.NewMock("以后叫你小星星"),
+		&soulSkipThenSaveLLM{},
+		tts.NewMock(),
+		config.MiniMaxConfig{},
+		testAgentCfg(600),
+	)
+
+	send := &toolSender{}
+	require.NoError(t, ag.Turn(ctx, "dev-retry", []byte("pcm"), send))
+	assert.Equal(t, "persona.save_soul", send.toolName)
+	assert.Contains(t, send.text, "已经改好了")
+	assert.NotContains(t, send.text, "好呀，以后叫小星星")
+	u, err := st.GetUser(ctx, "u1")
+	require.NoError(t, err)
+	assert.Contains(t, u.SoulMD, "小星星")
+}
+
+type reminderSetLLM struct {
+	round int
+}
+
+func (m *reminderSetLLM) Name() string { return "reminder-set-llm" }
+
+func (m *reminderSetLLM) Chat(_ context.Context, _ []llm.Message, _ []llm.ToolDef, _ llm.OnToken, result *llm.StreamResult) error {
+	m.round++
+	if result == nil {
+		return nil
+	}
+	if m.round == 1 {
+		result.FinishReason = "tool_calls"
+		result.ToolCalls = []llm.ToolCall{{
+			ID: "c1", Name: "reminder.set", Arguments: `{"when":"三点","what":"喝水"}`,
+		}}
+		return nil
+	}
+	result.FinishReason = "stop"
+	result.Content = "记下了，但我不会到点响喇叭。"
+	return nil
+}
+
+func TestTurn_ReminderSetWritesFile(t *testing.T) {
+	ctx := context.Background()
+	workspaceRoot, err := filepath.Abs("../../workspace")
+	require.NoError(t, err)
+	ps, err := persona.NewReloader(workspaceRoot)
+	require.NoError(t, err)
+	memRoot := t.TempDir()
+	mem := memory.NewMarkdownStore(memRoot)
+	sk := mustSkillsReloader(t, workspaceRoot)
+	hist := NewHistoryRegistry(5)
+
+	ag := New(ps, mem, sk, hist, nil,
+		asr.NewMock("三点提醒我喝水"),
+		&reminderSetLLM{},
+		tts.NewMock(),
+		config.MiniMaxConfig{},
+		testAgentCfg(600),
+	)
+	ag.WorkspaceRoot = memRoot
+
+	send := &toolSender{}
+	require.NoError(t, ag.Turn(ctx, "dev-rem", []byte("pcm"), send))
+	assert.Equal(t, "reminder.set", send.toolName)
+
+	body, err := os.ReadFile(filepath.Join(memRoot, "memory", "dev-rem", "reminders.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(body), "喝水")
+	assert.Contains(t, string(body), "三点")
+	assert.Contains(t, send.text, "不会到点响喇叭")
+	require.GreaterOrEqual(t, len(send.statuses), 2)
+	assert.Equal(t, "reminder.set", send.statuses[0].step)
+	assert.Equal(t, "记下提醒", send.statuses[0].text)
+}
+
+func TestReminderSet_ToolResultSaysNoBuzzer(t *testing.T) {
+	ag := &Agent{WorkspaceRoot: t.TempDir()}
+	reg := skills.NewRegistry()
+	ag.registerReminderBuiltins(reg, "dev-rem", time.Now())
+	out, err := reg.Execute(context.Background(), "reminder.set", `{"when":"三点","what":"喝水"}`)
+	require.NoError(t, err)
+	assert.Contains(t, out, "不会到点响喇叭")
+	assert.Contains(t, out, "喝水")
 }

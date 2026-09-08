@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -38,10 +40,13 @@ func (a *Agent) runToolLoop(
 	deviceID string,
 	now time.Time,
 	onVisible func(string) error,
+	userText string,
 ) (string, int, int, error) {
 	exec := &toolExecutor{agent: a, deviceID: deviceID}
 	var totalIn, totalOut int
 	maxRounds := a.maxToolRounds()
+	usedSoul := false
+	soulNudged := false
 
 	for round := 0; round < maxRounds; round++ {
 		var result llm.StreamResult
@@ -78,6 +83,9 @@ func (a *Agent) runToolLoop(
 			}
 			msgs = append(msgs, assistant)
 			for _, tc := range result.ToolCalls {
+				if tc.Name == "persona.save_soul" {
+					usedSoul = true
+				}
 				send.SendStatus(tc.Name, ws.StatusStart, statusStartText(tc.Name), 0)
 				send.SendTool(tc.Name, tc.Arguments)
 				out, execErr := exec.runOne(ctx, tc)
@@ -94,6 +102,18 @@ func (a *Agent) runToolLoop(
 				})
 				a.persistToolMessage(ctx, deviceID, tc, out)
 			}
+			continue
+		}
+
+		if wantsSoulSave(userText) && !usedSoul && !soulNudged {
+			soulNudged = true
+			if result.Content != "" {
+				msgs = append(msgs, llm.Message{Role: llm.RoleAssistant, Content: result.Content})
+			}
+			msgs = append(msgs, llm.Message{
+				Role:    llm.RoleSystem,
+				Content: "用户在改你的名字或性格。必须先调用 persona.save_soul 写入短版完整 SOUL Markdown，禁止只口头答应。",
+			})
 			continue
 		}
 
@@ -133,6 +153,10 @@ func statusStartText(toolName string) string {
 		return "更新人设"
 	case "persona.save_user":
 		return "更新画像"
+	case "reminder.set":
+		return "记下提醒"
+	case "reminder.list":
+		return "查看提醒"
 	case "weather":
 		return "查询天气"
 	case "code.write":
@@ -152,6 +176,10 @@ func statusDoneText(toolName string) string {
 		return "回忆完成"
 	case "persona.save_soul", "persona.save_user":
 		return "已更新"
+	case "reminder.set":
+		return "已记下"
+	case "reminder.list":
+		return "查完了"
 	case "weather":
 		return "查询完成"
 	case "code.write":
@@ -180,6 +208,23 @@ func truncateOLED(s string) string {
 	}
 	runes := []rune(s)
 	return string(runes[:maxRunes])
+}
+
+func wantsSoulSave(text string) bool {
+	t := strings.TrimSpace(text)
+	if t == "" {
+		return false
+	}
+	needles := []string{
+		"以后叫你", "以后叫我", "改成你叫", "改名字", "换个名字", "把你的名字",
+		"改性格", "性格改", "换人设", "更新你的灵魂", "更新人设",
+	}
+	for _, n := range needles {
+		if strings.Contains(t, n) {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *Agent) registerMemoryBuiltins(reg *skills.Registry, deviceID string, now time.Time) {
@@ -274,6 +319,96 @@ func (a *Agent) registerPersonaBuiltins(reg *skills.Registry, deviceID string) {
 			return "用户画像已更新。", nil
 		},
 	})
+}
+
+func (a *Agent) registerReminderBuiltins(reg *skills.Registry, deviceID string, now time.Time) {
+	_ = reg.AddBuiltin(&skills.Builtin{
+		Name:        "reminder.set",
+		Description: "记下用户要提醒的事。本设备不会到点响喇叭或闹钟；必须如实告诉用户只会记在本子上。",
+		Parameters: map[string]skills.Param{
+			"when": {Type: "string", Description: "时间描述，例如三点、明天早上", Required: true},
+			"what": {Type: "string", Description: "要提醒的内容", Required: true},
+		},
+		Handler: func(_ context.Context, args map[string]interface{}) (string, error) {
+			when, _ := args["when"].(string)
+			what, _ := args["what"].(string)
+			when = strings.TrimSpace(when)
+			what = strings.TrimSpace(what)
+			if when == "" || what == "" {
+				return "", fmt.Errorf("when and what required")
+			}
+			if err := appendReminder(a.WorkspaceRoot, deviceID, now, when, what); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("已记下：%s %s。我不会到点响喇叭，到时候还得你再叫我。", when, what), nil
+		},
+	})
+	_ = reg.AddBuiltin(&skills.Builtin{
+		Name:        "reminder.list",
+		Description: "列出该设备已记下的提醒（不会自动响铃）。",
+		Parameters:  map[string]skills.Param{},
+		Handler: func(_ context.Context, _ map[string]interface{}) (string, error) {
+			body, err := readReminders(a.WorkspaceRoot, deviceID)
+			if err != nil {
+				return "", err
+			}
+			if strings.TrimSpace(body) == "" {
+				return "还没有记下的提醒。", nil
+			}
+			return strings.TrimSpace(body), nil
+		},
+	})
+}
+
+func reminderPath(root, deviceID string) (string, error) {
+	if strings.TrimSpace(root) == "" {
+		return "", fmt.Errorf("workspace root not configured")
+	}
+	if strings.TrimSpace(deviceID) == "" {
+		return "", fmt.Errorf("deviceID empty")
+	}
+	return filepath.Join(root, "memory", deviceID, "reminders.md"), nil
+}
+
+func appendReminder(root, deviceID string, now time.Time, when, what string) error {
+	path, err := reminderPath(root, deviceID)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	exists := false
+	if _, statErr := os.Stat(path); statErr == nil {
+		exists = true
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if !exists {
+		if _, err := fmt.Fprintf(f, "# Reminders\n"); err != nil {
+			return err
+		}
+	}
+	_, err = fmt.Fprintf(f, "- [%s] %s：%s\n", now.Format("2006-01-02"), when, what)
+	return err
+}
+
+func readReminders(root, deviceID string) (string, error) {
+	path, err := reminderPath(root, deviceID)
+	if err != nil {
+		return "", err
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return string(b), nil
 }
 
 func (a *Agent) codeJail() *codejail.Jail {

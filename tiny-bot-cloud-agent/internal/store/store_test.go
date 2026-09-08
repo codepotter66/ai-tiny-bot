@@ -94,6 +94,19 @@ func TestMemory_IndexAndSearch(t *testing.T) {
 	assert.Len(t, hits, 2)
 }
 
+func TestMemorySearchQuery_FiltersByKeywords(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	today := time.Now().Format("2006-01-02")
+	now := time.Now().UnixMilli()
+	require.NoError(t, s.IndexMemoryLine(ctx, "d1", today, 1, now, "小主人喜欢猫"))
+	require.NoError(t, s.IndexMemoryLine(ctx, "d1", today, 2, now, "今天去公园玩了"))
+	hits, err := s.MemorySearchQuery(ctx, "d1", "猫", 7)
+	require.NoError(t, err)
+	require.Len(t, hits, 1)
+	assert.Equal(t, 1, hits[0].Line)
+}
+
 func TestExtractKeywords(t *testing.T) {
 	cases := map[string]string{
 		"小主人喜欢猫和恐龙":    "小 主 人 喜 欢 猫 和 恐 龙",

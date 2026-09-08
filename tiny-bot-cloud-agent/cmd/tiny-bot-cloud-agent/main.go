@@ -81,7 +81,7 @@ func main() {
 
 	// 4) Memory
 	mem := memory.NewMarkdownStore(cfg.Storage.WorkspaceRoot)
-	mem.SetIndexer(st)
+	mem.SetIndexer(memIndex{st})
 
 	// 5) Skills
 	sk, err := skills.NewReloader(cfg.Storage.WorkspaceRoot)

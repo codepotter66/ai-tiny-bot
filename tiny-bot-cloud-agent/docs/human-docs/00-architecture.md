@@ -117,7 +117,7 @@ tiny-bot-cloud-agent/
 6. 创建 HistoryRegistry（内存对话历史）
 7. 按配置构造 ASR / LLM / TTS Provider
 8. 启动 HTTP 服务（含 `/ws`）
-9. 监听 SIGHUP → 热重载 persona
+9. 监听 SIGHUP → 热重载 persona **和** skills（**不**重载 `.env`）
 10. 监听 SIGINT/SIGTERM → 优雅退出
 
 ---
@@ -288,8 +288,8 @@ SOUL → IDENTITY → AGENT → USER → 已知事实 → 情节记忆片段 →
 ### 5.4 加载与热重载
 
 - **启动加载**：`persona.NewReloader(workspaceRoot)` 读取四个 Markdown 文件，四个文件缺一不可
-- **热重载**：`kill -HUP <pid>` 触发 `persona.Reloader.Reload()`，失败时保留旧值，服务不中断
-- **不重载的内容**：skills、`.env` 配置——改这些需要重启服务
+- **热重载**：`kill -HUP <pid>` 触发 `persona.Reloader.Reload()` **和** `skills.Reloader.Reload()`，失败时保留旧值，服务不中断
+- **不重载的内容**：`.env` / 进程配置——改 Provider、端口、密钥必须重启服务
 
 ### 5.5 已知缺口与覆盖
 
@@ -360,9 +360,9 @@ Memory 提供 Agent 的**长期记忆**能力，设计目标是轻量、无外�
 - 时间衰减（30 天线性衰减）× **0.4**
 
 **流程**（`MarkdownStore.Recall`）：
-1. 扫描 `workspace/memory/<device_id>/` 下最近 N 天的日期 `.md`（不含 `facts.md`）
-2. 对每行计算相关度分数
-3. 排序取 top-K
+1. 若注入了 `MemorySearcher`（生产路径为 SQLite `memory_index`）：按 query 关键词取候选行，只对这些行打分
+2. 索引未注入、查询失败或命中为空时：扫描 `workspace/memory/<device_id>/` 下最近 N 天的日期 `.md`（不含 `facts.md`）
+3. 对候选行计算相关度分数，排序取 top-K
 4. 注入 system prompt 的 `## 历史记忆片段（按相关度）` 段
 
 **事实注入**：每轮 `ListFacts` → system prompt 的 `## 已知事实` 段（在情节片段之前）。
@@ -384,7 +384,7 @@ Memory 提供 Agent 的**长期记忆**能力，设计目标是轻量、无外�
 
 ### 6.6 已知缺口
 
-- ~~SQLite `memory_index` 表未同步~~ **已接入**：`MarkdownStore.Record` 可选注入 indexer，写入时同步 `IndexMemoryLine`
+- ~~SQLite `memory_index` 表未同步~~ **已接入**：`MarkdownStore.Record` 同步 `IndexMemoryLine`；`Recall` 优先 `MemorySearchQuery` 候选行，无命中再扫文件
 - ~~`memory.save` / `memory.recall` 工具尚未实现~~ **已实现**：agent 每轮注册为内置工具；`save` 写事实层，`recall` 搜情节日志
 - 异步「梦境」巩固（扫日志抽事实）为二期，首期仅显式 `memory.save`
 
@@ -467,7 +467,7 @@ frontmatter 字段：
 ### 7.6 添加新 Skill
 
 1. 在 `workspace/skills/<name>/` 创建 `SKILL.md` 和 `scripts/run.sh`
-2. **重启服务**（SIGHUP 目前不重载 skills）
+2. **SIGHUP 热重载 skills**（`kill -HUP <pid>`），或重启服务
 3. 技能会自动出现在 system prompt 和 LLM tools 列表中
 
 脚本约定：`run.sh` 从 stdin 读 JSON 参数，结果写到 stdout。
@@ -624,11 +624,11 @@ internal/memory/memory.go → Store 接口
 | **Tool calling 闭环** | `agent.Turn` + `openai_compat.go` | 解析 `tool_calls` → `skills.Run()` → 回填 tool message → 二次 LLM |
 | **per-device 用户画像** | `agent.Turn` | 读 `store.GetUser(device.UserID).UserMD` 覆盖 USER 段 |
 | **对话持久化** | `store/conversations.go` + `agent.Turn` | turn 前后写入 SQLite conversations/messages |
-| **记忆索引加速** | `memory/markdown.go` | Record 时同步写入 `memory_index` 表 |
+| **记忆索引加速** | `memory/markdown.go` + `store.MemorySearchQuery` | Record 写索引；Recall 先按关键词过滤候选再打分 |
 | **向量记忆** | 新 `Store` 实现 | 替换关键词召回为 embedding 检索 |
 | **Token 日限额** | `agent.Turn` | 使用 `cfg.Agent.DailyTokenCapPerDevice` |
 | **精细打断** | `agent.Bind` + context cancel | interrupt 时取消 LLM/TTS goroutine |
-| **Skills 热重载** | `main.go` SIGHUP handler | 类似 persona 的 Reloader 模式 |
+| **Skills 热重载** | `main.go` SIGHUP handler | **已实现**：与 persona 一并 `Reload()`，不重载 `.env` |
 | **配置项接入** | `agent.Turn` | 用 `cfg.Agent.MemoryRecallK/LookbackDays` 替换硬编码 `7, 5` |
 | **内置 memory 工具** | `internal/skills/` 或 agent 内置 | 实现 `memory.save` / `memory.recall` 作为内置 tool |
 | **新 HTTP 端点** | `internal/server/server.go` | 如管理后台、记忆浏览 API |
@@ -671,7 +671,7 @@ internal/memory/memory.go → Store 接口
 | Tool calling 未闭环 | **已实现** | `openai_compat` 解析 tool_calls + `agent.runToolLoop` |
 | `user_md` 未接入 | **已实现** | `agent.resolveUserMD` 覆盖 USER 段 |
 | 对话未持久化到 SQLite | **已实现** | Turn 写 messages；hello 时恢复 History |
-| `memory_index` 未接入 | **已实现** | `MarkdownStore.Record` 同步 `IndexMemoryLine` |
+| `memory_index` 未接入 | **已实现** | Record 同步索引；Recall 优先按关键词过滤候选 |
 | 记忆参数硬编码 | **已实现** | `AgentCfg.MemoryLookbackDays/RecallK` |
 | Token 日限额未强制 | **已实现** | Turn 开头 `SumDeviceTokensToday` |
 | Interrupt 未精细取消 | **已实现** | session `turnCancel` |

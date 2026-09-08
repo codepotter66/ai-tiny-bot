@@ -156,6 +156,7 @@ func (a *Agent) Turn(ctx context.Context, deviceID string, pcm []byte, send Send
 	reg := a.skills()
 	a.registerMemoryBuiltins(reg, deviceID, now)
 	a.registerPersonaBuiltins(reg, deviceID)
+	a.registerReminderBuiltins(reg, deviceID, now)
 	a.registerCodeBuiltins(reg, deviceID)
 	tools := reg.ToolDefs()
 
@@ -223,7 +224,7 @@ func (a *Agent) Turn(ctx context.Context, deviceID string, pcm []byte, send Send
 		return nil
 	}
 
-	text, tokensIn, tokensOut, err := a.runToolLoop(ctx, msgs, tools, send, deviceID, now, onVisible)
+	text, tokensIn, tokensOut, err := a.runToolLoop(ctx, msgs, tools, send, deviceID, now, onVisible, userText)
 	if err != nil {
 		if ctx.Err() != nil {
 			close(ttsQueue)

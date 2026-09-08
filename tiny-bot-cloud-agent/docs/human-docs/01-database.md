@@ -117,7 +117,7 @@ CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
 | `ts_ms` | INTEGER | 写入毫秒时间戳 |
 | `kw` | TEXT | 空格拼接的小写 token（中文单字 + 英文/数字词） |
 
-主键 `(device_id, date, line_no)`，额外 `idx_mem_kw ON memory_index(device_id, kw)` 用于按关键词过滤。
+主键 `(device_id, date, line_no)`，额外 `idx_mem_kw ON memory_index(device_id, kw)` 用于按关键词过滤。`store.MemorySearchQuery` 在 lookback 内按 query 分词过滤；`MarkdownStore.Recall` 有命中时只打分这些行。
 
 **为什么用 SQL 而不是纯文件 grep**？ 2c2g 单 VPS 上 grep 也行，但 7 天累计下来可能上千行；SQL 索引后 O(log n)，且能直接接 `BTree` 范围查询。
 

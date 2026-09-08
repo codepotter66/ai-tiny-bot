@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wisdomoasis/tiny-bot-cloud-agent/internal/store"
 )
 
 func TestRecord_CreatesFile(t *testing.T) {
@@ -59,6 +60,76 @@ func TestRecall_KeywordScoring(t *testing.T) {
 	require.NotEmpty(t, hits)
 	// 第一名应该包含"猫"
 	assert.Contains(t, hits[0].Content, "猫")
+}
+
+type stubSearcher struct {
+	hits []IndexHit
+}
+
+func (s *stubSearcher) IndexMemoryLine(context.Context, string, string, int, int64, string) error {
+	return nil
+}
+
+func (s *stubSearcher) SearchMemory(context.Context, string, string, int) ([]IndexHit, error) {
+	return s.hits, nil
+}
+
+func TestRecall_IndexerRestrictsCandidates(t *testing.T) {
+	root := t.TempDir()
+	s := NewMarkdownStore(root)
+	ctx := context.Background()
+	now := time.Now()
+	require.NoError(t, s.Record(ctx, "d1", "user", "我喜欢猫", now))
+	require.NoError(t, s.Record(ctx, "d1", "user", "我喜欢恐龙", now))
+
+	date := now.Format("2006-01-02")
+	// 索引只交出「猫」那一行（文件第 2 行：标题后第一行内容）
+	s.SetIndexer(&stubSearcher{hits: []IndexHit{{Date: date, Line: 2}}})
+
+	hits, err := s.Recall(ctx, "d1", "恐龙", 30, 5)
+	require.NoError(t, err)
+	for _, h := range hits {
+		assert.NotContains(t, h.Content, "恐龙", "index-constrained recall must not scan extra file lines")
+	}
+}
+
+type storeMemIndex struct {
+	st *store.Store
+}
+
+func (m storeMemIndex) IndexMemoryLine(ctx context.Context, deviceID, date string, lineNo int, tsMs int64, content string) error {
+	return m.st.IndexMemoryLine(ctx, deviceID, date, lineNo, tsMs, content)
+}
+
+func (m storeMemIndex) SearchMemory(ctx context.Context, deviceID, query string, lookbackDays int) ([]IndexHit, error) {
+	hits, err := m.st.MemorySearchQuery(ctx, deviceID, query, lookbackDays)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]IndexHit, 0, len(hits))
+	for _, h := range hits {
+		out = append(out, IndexHit{Date: h.Date, Line: h.Line})
+	}
+	return out, nil
+}
+
+func TestRecall_StoreIndexFindsIndexedLine(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "idx.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = st.Close() })
+
+	root := t.TempDir()
+	s := NewMarkdownStore(root)
+	s.SetIndexer(storeMemIndex{st})
+	now := time.Now()
+	require.NoError(t, s.Record(ctx, "d1", "user", "我喜欢猫", now))
+	require.NoError(t, s.Record(ctx, "d1", "user", "我喜欢恐龙", now))
+
+	hits, err := s.Recall(ctx, "d1", "恐龙", 30, 5)
+	require.NoError(t, err)
+	require.NotEmpty(t, hits)
+	assert.Contains(t, hits[0].Content, "恐龙")
 }
 
 func TestRecall_EmptyWhenNoFile(t *testing.T) {

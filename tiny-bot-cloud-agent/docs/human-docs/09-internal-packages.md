@@ -118,7 +118,7 @@ flowchart TB
 | 会话/消息 | `OpenConversation`、`AppendMessage`、`ListRecentMessages`、`SumDeviceTokensToday` | ✅ agent Turn 写入与恢复 |
 | 记忆索引 | `IndexMemoryLine`、`MemorySearch` | ✅ `MarkdownStore.Record` 同步写入 |
 
-**注意**：设备鉴权与对话持久化都走这里；长期记忆仍以 Markdown 为主路径，`memory_index` 作写入侧索引。表设计细节见 [01-database.md](01-database.md)。
+**注意**：设备鉴权与对话持久化都走这里；长期记忆仍以 Markdown 为主路径。`memory_index` 在 `Record` 时写入，并经 `MemorySearchQuery` 给 `Recall` 缩候选。表设计细节见 [01-database.md](01-database.md)。
 
 ---
 
@@ -249,7 +249,7 @@ TodayPath(deviceID) string
 
 **召回**：中文单字 + 英文/数字词；分数 = 关键词重合 × 0.6 + 30 天时间衰减 × 0.4。lookback 只约束情节；事实始终可注入 prompt。
 
-**注意**：与 `agent.History` 不同——History 是近期完整对话（内存），情节是跨天日志片段，事实是跨 lookback 的要点。`memory.save` 写事实层；`memory_index` 仅随情节 `Record` 可选同步。
+**注意**：与 `agent.History` 不同——History 是近期完整对话（内存），情节是跨天日志片段，事实是跨 lookback 的要点。`memory.save` 写事实层；`memory_index` 随情节 `Record` 同步，且 `Recall` 优先用索引候选（无命中再扫文件）。
 
 ---
 

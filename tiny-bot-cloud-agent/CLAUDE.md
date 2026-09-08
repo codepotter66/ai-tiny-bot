@@ -72,7 +72,7 @@ tiny-bot-cloud-agent/
 3. **接口 + Mock**: `asr/tts/llm` 全部接口化，v1 默认 Mock 实现，便于切换
 4. **不引入向量库**: 2c2g 跑不起 embedding，记忆用关键词 + 时间衰减打分
 5. **静态二进制优先**: 用 `modernc.org/sqlite`（无 CGo），distroless 镜像可行
-6. **SIGHUP 热重载**: 重新读取 `.env` 与 `workspace/*.md`，不杀连接
+6. **SIGHUP 热重载**: 重载 `workspace` 人设四文件与 `workspace/skills/`，**不**重载 `.env`（改配置需重启），不杀连接
 7. **每改必验**: 改完跑 `make test`，全绿再提交
 8. **每次可交付变更**: 追加 `CHANGELOG.md` 一行（变更要点）
 

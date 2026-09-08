@@ -6,6 +6,7 @@
 
 ### Changed
 
+- **热重载文档对齐代码**：`00-architecture.md` / `CLAUDE.md` 写明 SIGHUP 重载人设四文件与 `workspace/skills/`，**不**重载 `.env`
 - **强化 `persona.save_soul` 依从性**：`AGENT.md` 要求改名/性格必须先调工具再口语确认，并允许短版 SOUL Markdown；内置工具描述同步强调「勿只口头答应」
 - **默认人设「艾希」**：workspace `IDENTITY`/`SOUL`/`USER`/`AGENT` 从「小朋友小陪」改为全家温热管家；身份口径不主动提 AI；强调实事求是；`llm.LengthDirective` 短答提示改为「等对方」
 - **文档补充 `seed` 含义**：README、`cmd/seed` 注释、`02-firmware-integration.md` 写明 seed 是云端预登记设备（入场许可），不是立刻上线；未 seed 会导致 provision 401
@@ -17,6 +18,9 @@
 ### Added
 
 - **本机受限 Python `code.write` / `code.run`**：写入 `workspace/scratch/<device_id>/*.py`，`python3 -I` 超时执行且不继承 `TB_*` 密钥；复用 `status` 进度文案；配置 `TB_CODE_RUN_TIMEOUT` / `TB_CODE_PYTHON_BIN`；Alpine 镜像安装 `python3`
+- **`reminder.set` / `reminder.list`**：记下提醒到 `memory/<device_id>/reminders.md`；明确不会到点响喇叭
+- **改名未调 `persona.save_soul` 时补一轮强制 tool 提示**：避免只口头答应
+- **情节 Recall 优先走 `memory_index` 候选行**：无命中时回退扫 Markdown
 - **单轮多段 `status` 事件流**：WebSocket 下行 `type=status`（`step`/`phase`/`text`/`progress`）；`runToolLoop` 在每个 tool 前后发 `start`/`done|error`（不进 TTS）；固件 OLED 优先显示 `status.text`；配置 `TB_AGENT_TURN_TIMEOUT`（默认 120s）、`TB_AGENT_MAX_TOOL_ROUNDS`（默认 8）
 - **`make seed` / `make seed-remote`**：本机可登记设备；`seed-remote` 经 SSH 在服务器 agent 容器内跑 `/opt/tiny-bot/seed`（变量 `DEVICE_ID` / `PAIRING_CODE` / `DISPLAY_NAME`），无需登录服务器手敲
 - **`cmd/list-voices`**：调用 MiniMax `/v1/get_voice` 列出账号可用音色；支持 `-type` / `-q` / `-json`；`make list-voices`

@@ -61,6 +61,32 @@ func (s *Store) MemorySearch(ctx context.Context, deviceID string, lookbackDays 
 	return out, rows.Err()
 }
 
+// MemorySearchQuery 在 lookback 内按 query 关键词过滤 memory_index。
+func (s *Store) MemorySearchQuery(ctx context.Context, deviceID, query string, lookbackDays int) ([]MemoryHit, error) {
+	all, err := s.MemorySearch(ctx, deviceID, lookbackDays)
+	if err != nil {
+		return nil, err
+	}
+	q := strings.Fields(extractKeywords(query))
+	if len(q) == 0 {
+		return nil, nil
+	}
+	var out []MemoryHit
+	for _, h := range all {
+		kwPad := " " + h.KW + " "
+		for _, tok := range q {
+			if tok == "" {
+				continue
+			}
+			if strings.Contains(kwPad, " "+tok+" ") {
+				out = append(out, h)
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
 // extractKeywords 取中文 + 英文 + 数字 token，2 字符以上。
 // 极简实现：空格、标点分词；中文按字符切。
 func extractKeywords(s string) string {
