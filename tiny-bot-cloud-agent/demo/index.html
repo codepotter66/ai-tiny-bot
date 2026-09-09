@@ -459,6 +459,10 @@
     <input id="deviceId" value="tinypal-demo">
     <label>Pairing Code</label>
     <input id="pairingCode" value="DEMO-1234">
+    <p style="font-size:11px;color:var(--muted);line-height:1.4;margin:6px 0 10px">
+      网页请用 <code>tinypal-demo</code> / <code>DEMO-1234</code>（独立账号 <code>u-demo</code>）。
+      不要填音箱的 Device ID：配网带 <code>force=1</code>，会换掉那台设备的 token，音箱掉线。
+    </p>
 
     <button id="provisionBtn">1. 配网（拿 token）</button>
     <button id="connectBtn" class="secondary">2. 连接 WebSocket</button>
@@ -1053,6 +1057,13 @@ provisionBtn.addEventListener('click', async () => {
   const serverUrl = serverUrlInput.value.replace(/\/+$/, '');
   const deviceId = deviceIdInput.value;
   const code = pairingCodeInput.value;
+  if (deviceId && deviceId !== 'tinypal-demo') {
+    const ok = window.confirm(
+      '当前 Device ID 不是网页专用的 tinypal-demo。\n' +
+      '配网会重新签发该设备的 token。若这是音箱的 ID，音箱会立刻掉线。\n\n仍要继续？'
+    );
+    if (!ok) return;
+  }
 
   provisionBtn.disabled = true;
   provisionBtn.textContent = '配网中...';

@@ -69,6 +69,15 @@ func main() {
 	}
 	defer st.Close()
 
+	if cfg.Server.DemoEnabled {
+		if err := st.EnsureDemoDevice(ctx); err != nil {
+			slog.Warn("ensure demo device", "err", err)
+		} else {
+			slog.Info("demo device ready",
+				"device_id", store.DemoDeviceID, "user_id", store.DemoUserID)
+		}
+	}
+
 	// 2) Auth
 	authSvc := auth.New(st)
 

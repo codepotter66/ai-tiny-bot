@@ -127,6 +127,53 @@ func (s *Store) ReBindDevice(ctx context.Context, id, tokenHash string) error {
 	return nil
 }
 
+// 网页 demo 专用账号/设备。与硬件 device_id 分开，避免 force 配网抢走音箱 token。
+const (
+	DemoUserID      = "u-demo"
+	DemoDisplayName = "网页调试"
+	DemoDeviceID    = "tinypal-demo"
+	DemoPairingCode = "DEMO-1234"
+)
+
+// EnsureUserAndDevice 若用户或设备不存在则创建；已存在的设备一行都不改（含 pairing_code / token）。
+func (s *Store) EnsureUserAndDevice(ctx context.Context, userID, displayName, deviceID, pairingCode string) error {
+	if userID == "" || deviceID == "" {
+		return fmt.Errorf("userID and deviceID required")
+	}
+	if _, err := s.GetUser(ctx, userID); err != nil {
+		if !errors.Is(err, ErrNotFound) {
+			return err
+		}
+		if displayName == "" {
+			displayName = userID
+		}
+		if err := s.CreateUser(ctx, &User{ID: userID, DisplayName: displayName}); err != nil {
+			return err
+		}
+	}
+	existing, err := s.GetDevice(ctx, deviceID)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return err
+	}
+	if existing != nil {
+		return nil
+	}
+	if pairingCode == "" {
+		return fmt.Errorf("pairingCode required for new device")
+	}
+	return s.CreateDevice(ctx, &Device{
+		ID:          deviceID,
+		UserID:      userID,
+		PairingCode: pairingCode,
+		Status:      "unbound",
+	})
+}
+
+// EnsureDemoDevice 登记网页调试设备 tinypal-demo（幂等，不碰其它设备）。
+func (s *Store) EnsureDemoDevice(ctx context.Context) error {
+	return s.EnsureUserAndDevice(ctx, DemoUserID, DemoDisplayName, DemoDeviceID, DemoPairingCode)
+}
+
 // TouchDevice 更新 last_seen_at。
 func (s *Store) TouchDevice(ctx context.Context, id string) error {
 	_, err := s.RW.ExecContext(ctx,

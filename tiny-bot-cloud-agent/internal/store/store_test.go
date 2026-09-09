@@ -80,6 +80,39 @@ func TestSoulMD_RoundTrip(t *testing.T) {
 	assert.Contains(t, got.UserMD, "小明")
 }
 
+func TestEnsureUserAndDevice_CreatesThenIdempotent(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	require.NoError(t, s.EnsureUserAndDevice(ctx, "u-demo", "网页调试", "tinypal-demo", "DEMO-1234"))
+	d, err := s.GetDevice(ctx, "tinypal-demo")
+	require.NoError(t, err)
+	assert.Equal(t, "u-demo", d.UserID)
+	assert.Equal(t, "DEMO-1234", d.PairingCode)
+	assert.Equal(t, "unbound", d.Status)
+
+	require.NoError(t, s.BindDevice(ctx, "tinypal-demo", "hash-keep"))
+	require.NoError(t, s.EnsureDemoDevice(ctx))
+	again, err := s.GetDevice(ctx, "tinypal-demo")
+	require.NoError(t, err)
+	assert.Equal(t, "bound", again.Status)
+	assert.Equal(t, "hash-keep", again.TokenHash)
+}
+
+func TestEnsureUserAndDevice_DoesNotTouchOtherDevice(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	require.NoError(t, s.CreateUser(ctx, &User{ID: "u-hw", DisplayName: "音箱"}))
+	require.NoError(t, s.CreateDevice(ctx, &Device{
+		ID: "tinypal-01", UserID: "u-hw", PairingCode: "ABCD-1234", Status: "bound", TokenHash: "hw-token",
+	}))
+	require.NoError(t, s.EnsureDemoDevice(ctx))
+	hw, err := s.GetDevice(ctx, "tinypal-01")
+	require.NoError(t, err)
+	assert.Equal(t, "bound", hw.Status)
+	assert.Equal(t, "hw-token", hw.TokenHash)
+	assert.Equal(t, "u-hw", hw.UserID)
+}
+
 func TestMemory_IndexAndSearch(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

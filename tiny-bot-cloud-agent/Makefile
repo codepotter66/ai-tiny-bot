@@ -141,6 +141,7 @@ TAR_FILE     ?= $(BIN_NAME).tar
 DEVICE_ID    ?= tinypal-01
 PAIRING_CODE ?= ABCD-1234
 DISPLAY_NAME ?= 小主人
+USER_ID      ?= u-default
 
 .PHONY: require-server
 require-server:
@@ -159,16 +160,20 @@ require-server:
 
 .PHONY: seed
 seed: build-all ## 本地 DB 登记设备（仅本机联调；线上无效）
-	./$(BIN_DIR)/seed -device-id "$(DEVICE_ID)" -pairing-code "$(PAIRING_CODE)" -display-name "$(DISPLAY_NAME)"
+	./$(BIN_DIR)/seed -device-id "$(DEVICE_ID)" -pairing-code "$(PAIRING_CODE)" -display-name "$(DISPLAY_NAME)" -user-id "$(USER_ID)"
 	@echo "✅ 本地已登记 $(DEVICE_ID)。线上请用: make seed-remote DEVICE_ID=$(DEVICE_ID) PAIRING_CODE=$(PAIRING_CODE)"
 
 .PHONY: seed-remote
 seed-remote: require-server ## 本机 SSH 到服务器，在 agent 容器内登记设备
 	ssh $(SERVER) "cd $(SERVER_DIR)/tiny-bot-cloud-agent && \
 		docker compose --profile https-selfsigned exec -T agent \
-		/opt/tiny-bot/seed -device-id '$(DEVICE_ID)' -pairing-code '$(PAIRING_CODE)' -display-name '$(DISPLAY_NAME)'"
+		/opt/tiny-bot/seed -device-id '$(DEVICE_ID)' -pairing-code '$(PAIRING_CODE)' -display-name '$(DISPLAY_NAME)' -user-id '$(USER_ID)'"
 	@echo ""
-	@echo "✅ 远端已登记 $(DEVICE_ID)。请确认固件 config.h 的 TB_DEVICE_ID / TB_PAIRING_CODE 一致，然后复位 ESP32。"
+	@echo "✅ 远端已登记 $(DEVICE_ID)（user=$(USER_ID)）。硬件请用固件自己的 device_id；网页 demo 请用 tinypal-demo。"
+
+.PHONY: seed-demo-remote
+seed-demo-remote: require-server ## 远端登记网页调试设备（不碰硬件 device）
+	$(MAKE) seed-remote DEVICE_ID=tinypal-demo PAIRING_CODE=DEMO-1234 DISPLAY_NAME=网页调试 USER_ID=u-demo
 
 .PHONY: deploy
 deploy: require-server docker ## 一键部署到服务器（build + save + scp 代码+env + 远端触发 + 健康检查）

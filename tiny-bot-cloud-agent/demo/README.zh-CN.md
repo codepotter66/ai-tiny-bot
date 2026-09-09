@@ -30,6 +30,8 @@ make run
 
 线上部署后：手机需 **HTTPS**（见下方）；电脑 localhost 仍可用 `http://localhost:5678/demo/`。
 
+**网页与音箱并行**：demo 默认设备是 `tinypal-demo` / `DEMO-1234`（用户 `u-demo`），和固件 `config.h` 里的 Device ID **不是同一个**。请勿在网页里填音箱的 ID 再点配网（`force=1` 会换 token，音箱掉线）。远端补登记且不重启容器：`make seed-demo-remote`。
+
 **手机远程（无域名，推荐）：**
 
 ```bash

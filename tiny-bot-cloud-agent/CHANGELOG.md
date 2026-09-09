@@ -17,6 +17,7 @@
 
 ### Added
 
+- **网页 demo 与硬件设备隔离**：启动时幂等登记 `tinypal-demo` / `u-demo` / `DEMO-1234`，不改其它设备的 token；demo 页提示勿填音箱 Device ID；`make seed-demo-remote` 可在不重启容器时补登记
 - **本机受限 Python `code.write` / `code.run`**：写入 `workspace/scratch/<device_id>/*.py`，`python3 -I` 超时执行且不继承 `TB_*` 密钥；复用 `status` 进度文案；配置 `TB_CODE_RUN_TIMEOUT` / `TB_CODE_PYTHON_BIN`；Alpine 镜像安装 `python3`
 - **`reminder.set` / `reminder.list`**：记下提醒到 `memory/<device_id>/reminders.md`；明确不会到点响喇叭
 - **改名未调 `persona.save_soul` 时补一轮强制 tool 提示**：避免只口头答应

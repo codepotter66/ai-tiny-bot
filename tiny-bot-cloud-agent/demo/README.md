@@ -19,6 +19,8 @@ Or exercise the protocol with fake-device:
 ./bin/fake-device -device-id tinypal-demo -code DEMO-1234
 ```
 
+Keep the browser Device ID as `tinypal-demo`. Do not provision with the speaker's firmware Device ID (`force=1` would rotate that token and drop the hardware WebSocket). On the server, `make seed-demo-remote` registers the demo device without restarting the agent.
+
 ### 2. Open the demo
 
 **Recommended (same origin as the agent):**

@@ -24,6 +24,7 @@ After deploy, open on phone: **`https://<server-ip>/demo/`** (trust cert once; o
 |---|---|
 | `make deploy` | Release (build + scp + remote apply + health) |
 | `make seed-remote` | Register device in the remote agent container |
+| `make seed-demo-remote` | Register web-debug device `tinypal-demo` (`u-demo`; no restart, hardware rows untouched) |
 | `make seed` | Local DB register (local only) |
 | `make deploy-health` | Curl remote `/healthz` |
 | `make deploy-status` | Remote `docker compose ps` |
@@ -34,6 +35,7 @@ After deploy, open on phone: **`https://<server-ip>/demo/`** (trust cert once; o
 ```bash
 make seed-remote
 make seed-remote DEVICE_ID=tinypal-esp32-01 PAIRING_CODE=ABCD-1234
+make seed-demo-remote   # web /demo only; do not reuse the speaker device_id
 ```
 
 Then reset the ESP32; firmware `config.h` must match `TB_DEVICE_ID` / `TB_PAIRING_CODE`.

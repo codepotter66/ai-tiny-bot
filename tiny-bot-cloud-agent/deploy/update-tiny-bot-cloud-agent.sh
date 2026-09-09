@@ -321,14 +321,17 @@ echo ""
 echo "▶ 4/5 启动新服务..."
 compose up -d
 
-# 8.5) 自动 seed 默认设备（demo 用，idempotent 重跑安全）
+# 8.5) 自动 seed 网页 demo 设备（与硬件 device_id 分离；幂等，不改已有行）
 echo ""
-echo "▶ 4.5/5 Seed 默认设备..."
-if docker ps --format '{{.Names}}' | grep -q "^${SERVICE_NAME}\$"; then
-    docker exec "${SERVICE_NAME}" /opt/tiny-bot/seed \
+echo "▶ 4.5/5 Seed demo 设备 tinypal-demo..."
+if compose exec -T agent /opt/tiny-bot/seed \
         -device-id tinypal-demo \
         -user-id u-demo \
-        -pairing-code DEMO-1234 2>&1 | sed 's/^/  /' || true
+        -display-name 网页调试 \
+        -pairing-code DEMO-1234 2>&1 | sed 's/^/  /'; then
+    echo "  demo 设备已登记"
+else
+    echo "  ⚠️ seed tinypal-demo 失败（网页 /demo 配网会 401）；硬件设备未改动"
 fi
 
 # 9) 等待服务启动

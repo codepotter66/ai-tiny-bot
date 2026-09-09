@@ -23,7 +23,8 @@ make deploy
 | 命令 | 干嘛 |
 |---|---|
 | `make deploy` | **发版**（build + scp + 远端触发 + 健康检查） |
-| `make seed-remote` | **远端登记设备**（SSH 进 agent 容器跑 seed；可传 `DEVICE_ID` / `PAIRING_CODE`） |
+| `make seed-remote` | **远端登记设备**（SSH 进 agent 容器跑 seed；可传 `DEVICE_ID` / `PAIRING_CODE` / `USER_ID`） |
+| `make seed-demo-remote` | 远端登记网页调试设备 `tinypal-demo`（用户 `u-demo`，不重启、不改硬件设备） |
 | `make seed` | 本地 DB 登记设备（仅本机联调） |
 | `make deploy-health` | 远端 /healthz（本地 curl，不登录） |
 | `make deploy-status` | 远端 `docker compose ps`（容器状态） |
@@ -34,6 +35,7 @@ make deploy
 ```bash
 make seed-remote
 make seed-remote DEVICE_ID=tinypal-esp32-01 PAIRING_CODE=ABCD-1234
+make seed-demo-remote   # 网页 /demo 用，勿填成音箱的 device_id
 ```
 
 登记后复位 ESP32；固件 `config.h` 的 `TB_DEVICE_ID` / `TB_PAIRING_CODE` 须与上述参数一致。
