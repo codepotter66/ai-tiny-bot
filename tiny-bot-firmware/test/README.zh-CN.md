@@ -21,6 +21,7 @@ pio device monitor --baud 115200
 - **step2_oled.cpp**: 输出 "OLED init OK!" 或错误信息
 - **step3_audio.cpp**: 输出麦克风音量数值
 - **完整固件 main**：先有 `[cloud] << status step=… phase=… text=…`，再有 `[main] STATUS …`；WAITING 时 OLED 显示 `text`（最多 21 字）
+- **打断 barge-in**：Thinking/播报中再说话或按 BOOT → `[main] barge-in` 与 `[cloud] >> interrupt`；OLED 回到 `Listening...`
 
 ### 3. 观察硬件行为
 

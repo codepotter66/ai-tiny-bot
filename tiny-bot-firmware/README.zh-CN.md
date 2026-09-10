@@ -60,15 +60,16 @@ make monitor         # 打开串口监视
 
 ### 5. 用起来
 
-云端就绪后 OLED 显示**大眼睛表情** + 底栏 `Speak anytime`，**直接说话即可**（免提能量 VAD，无需按 BOOT）：
+云端就绪后 OLED 显示**大眼睛表情** + 底栏 `Speak anytime`，**直接说话即可**（免提能量 VAD；开始录音不必按 BOOT）：
 
 1. 空闲：眨眼、左右看  
 2. 说话 → 聆听表情 + `Listening...`  
 3. 说完安静约 1.1s → 思考表情 + `Thinking...` → 开心表情 + `Speaking`  
-4. 播完自动回到空闲（播报中不打断）
+4. Thinking / 播报中再说话或按 **BOOT** 可打断（串口：`[main] barge-in`、`[cloud] >> interrupt`）  
+5. 播完（或打断结束）回到空闲  
 
 转写与回复文本只打在**串口**，不再刷满屏字。  
-阈值可在 `config.h` 里调：`TB_VAD_SPEECH_THRESHOLD` / `TB_VAD_SILENCE_MS` / `TB_VAD_MIN_SPEECH_MS`。
+可在 `config.h` 调：`TB_VAD_*`、`TB_VAD_BARGE_*`、`TB_SPK_GAIN_Q8`。响度/底噪需上板听感确认（无板时仅保证编译通过）。
 
 ## 项目结构
 
@@ -112,6 +113,9 @@ tiny-bot-firmware/
 | `TB_VAD_SILENCE_MS` | | `1100` | 静音多久结束本轮 |
 | `TB_VAD_MIN_SPEECH_MS` | | `400` | 最短说话时长才允许因静音结束 |
 | `TB_VAD_REARM_DELAY_MS` | | `250` | 播完后再听的冷却 |
+| `TB_VAD_BARGE_THRESHOLD` | | `40` | 播报中打断峰值阈值 |
+| `TB_VAD_BARGE_CHUNKS` | | `3` | 连续超阈 chunk 数才打断（约 96ms） |
+| `TB_SPK_GAIN_Q8` | | `220` | 喇叭数字音量（Q8；256=1.0）；GAIN=6dB 偏小时可调高 |
 
 `config.h` 在 `.gitignore` 里，不会提交。
 
@@ -124,8 +128,9 @@ tiny-bot-firmware/
 
 ## 已知限制
 
-- **打断**：播报 / Thinking 期间不打断（避免喇叭回灌误触发）；播完再听
+- **打断**：Thinking / 播报可用能量或 BOOT 打断；喇叭回灌误触发时调高 `TB_VAD_BARGE_THRESHOLD`（无 AEC）
 - **VAD**：板端峰值能量检测，嘈杂环境可能需调高 `TB_VAD_SPEECH_THRESHOLD`
+- **听感**：数字音量与空闲停 I2S 时钟已实现；底噪/响度需上板确认
 - **OLED**：表情脸 + 底栏状态；对话正文只在串口
 - **多设备**：NVS key 写死 `tinybot/token`，单设备够用
 - **WS 鉴权失败**：会自动清 NVS 里的 token，等下次重启重新 `provision`

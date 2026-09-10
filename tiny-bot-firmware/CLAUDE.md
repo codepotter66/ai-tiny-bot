@@ -39,15 +39,19 @@ tiny-bot-firmware/
 ## 状态机
 
 ```
-        ┌────────────┐  按键按下  ┌─────────┐  按键松开  ┌──────────┐
-        │   IDLE     │ ─────────► │ RECORD  │ ────────► │ WAITING  │
-        │ (需 READY) │            │ Listen  │            │ Think... │
-        └────────────┘            └─────────┘            └─────┬────┘
-              ▲                                                  │ audio
-              │ done / interrupt                          ┌─────▼────┐
-              └────────────────────────────────────────── │ PLAYING  │
-                     (interrupt: 发 interrupt + 停播)      └──────────┘
+        ┌────────────┐  能量超阈  ┌─────────┐  静音/超时  ┌──────────┐
+        │   IDLE     │ ─────────► │ RECORD  │ ─────────► │ WAITING  │
+        │ (需 READY) │            │ Listen  │             │ Think... │
+        └────────────┘            └─────────┘             └─────┬────┘
+              ▲                          ▲                       │ audio
+              │ done                     │ barge-in        ┌─────▼────┐
+              └──────────────────────────┴──────────────── │ PLAYING  │
+                     (interrupt: 发 interrupt + 停播)       └──────────┘
 ```
+
+- **IDLE**：免提能量 VAD（`TB_VAD_SPEECH_*`）
+- **WAITING / PLAYING**：BOOT 或能量可打断；PLAYING 用更高阈值 `TB_VAD_BARGE_*`，减轻喇叭回灌误触发
+- **空闲喇叭**：非播放时 `i2s_stop` 停 BCLK（MAX98357 休眠）；TTS 用 `TB_SPK_GAIN_Q8` 数字音量
 
 详见 [../tiny-bot-cloud-agent/docs/human-docs/02-firmware-integration.md](../tiny-bot-cloud-agent/docs/human-docs/02-firmware-integration.md)。
 
@@ -115,8 +119,9 @@ make build-all
 cd ../tiny-bot-firmware
 make main
 
-# 4) 按 BOOT 按键，看到 OLED 显示 "Listening..."
-# 说话，松开 → OLED 显示 "Thinking..." 然后 "Speaking"，喇叭播放
+# 4) OLED 显示 "Speak anytime" 后直接说话（免提 VAD）
+# 说话，停顿 → OLED "Thinking..." 然后 "Speaking"，喇叭播放
+# Thinking/播报中可再说话或按 BOOT 打断
 ```
 
 ## 开发原则
@@ -138,7 +143,8 @@ make main
 
 ## 已知限制 / 后续 TODO
 
-- **VAD**：仍用按键控制起停，未做静音检测
+- **打断误触发**：嘈杂环境或麦靠近喇叭时，可调高 `TB_VAD_BARGE_THRESHOLD`；无 AEC，非全双工
+- **听感**：数字音量 / 空闲停时钟已实现；底噪与响度需上板确认
 - **TLS**：无证书 pinning（`setInsecure`）；生产建议改 CA
 - **采样率**：`hello.ok.sample_rate` 仅告警，不动态改 I2S
 - **多设备**：当前 NVS 名字写死，单设备够用

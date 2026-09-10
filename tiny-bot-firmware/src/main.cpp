@@ -9,10 +9,10 @@
  * ============================================================
  *
  * 状态机：
- *   IDLE     - 免，能量 VAD 免提聆听（仅 cloud.isReady()）
+ *   IDLE     - 待机，能量 VAD 免提聆听（仅 cloud.isReady()）
  *   RECORD   - 录音中，按 chunk 发 audio；静音或超时发 end
- *   WAITING  - 已发 end，等 stt/text/audio（不跑 VAD）
- *   PLAYING  - TTS 音频写入 I2S 喇叭（不跑 VAD，不打断）
+ *   WAITING  - 已发 end，等 stt/text/audio；可读麦打断
+ *   PLAYING  - TTS 写入喇叭；更高阈值能量 VAD 或 BOOT 可打断
  *   ERROR    - 短暂错误提示后回 IDLE
  *
  * 流程：
@@ -22,8 +22,9 @@
  *   4. cloud_client 自动开 WS → 发 hello → 收到 hello.ok → READY
  *   5. IDLE 读麦：音量超阈值 → RECORD → 边录边发
  *   6. 静音足够久（且已说够 minSpeech）或超时 → 发 end → WAITING
- *   7. 收到 audio → 喂 I2S 喇叭
- *   8. 收到 done → IDLE（rearm delay 后再听）
+ *   7. 收到 audio → 启喇叭时钟 + 数字增益 → 喂 I2S
+ *   8. 收到 done → IDLE（停喇叭时钟；rearm delay 后再听）
+ *   9. WAITING/PLAYING：BOOT 或能量打断 → interrupt → RECORD
  * ============================================================
  */
 
@@ -37,6 +38,16 @@
 #include "config.h"
 #include "cloud_client.h"
 #include "oled_face.h"
+
+#ifndef TB_SPK_GAIN_Q8
+#define TB_SPK_GAIN_Q8 220
+#endif
+#ifndef TB_VAD_BARGE_THRESHOLD
+#define TB_VAD_BARGE_THRESHOLD 40
+#endif
+#ifndef TB_VAD_BARGE_CHUNKS
+#define TB_VAD_BARGE_CHUNKS 3
+#endif
 
 // ============================================================
 // 硬件
@@ -68,7 +79,9 @@ unsigned long errorUntilMs_ = 0;
 size_t recordSamplesSent_ = 0;
 String lastUserText_;
 String lastAssistantText_;
-bool turnActive_ = false;  // WAITING/PLAYING 期间为 true
+bool turnActive_ = false;  // WAITING/PLAYING（及打断后 RECORD）期间为 true
+bool spkRunning_ = false;
+int bargeLoudChunks_ = 0;
 
 // Cloud 客户端
 CloudClient cloud(HTTP_BASE, WS_HOST, WS_PORT, WS_PATH,
@@ -82,6 +95,8 @@ void setupI2SMic();
 void setupI2SSpeaker();
 void connectWiFi();
 void displayState();
+void spkEnsureStarted();
+void spkStop();
 void stopPlayback();
 void goIdle();
 
@@ -90,7 +105,9 @@ void writeSpkChunk(const int16_t* pcm, size_t samples);
 void playBeep(int freq_hz, int duration_ms);
 int chunkPeakPercent(const int16_t* buf, size_t samples);
 void startVadRecord(const int16_t* firstChunk);
+void startVadRecordNoFirstChunk();
 void finishVadRecord(bool discard);
+void beginBargeIn(bool keepFirstChunk, const int16_t* firstChunk);
 
 void onSTT(const String& t, const String& lang);
 void onText(const String& t);
@@ -141,13 +158,35 @@ void displayState() {
   oledFaceTick(millis());
 }
 
-void stopPlayback() {
+void spkEnsureStarted() {
+  if (spkRunning_) return;
+  i2s_start(I2S_SPK_PORT);
+  // 先写一小段静音，减轻启时钟 pop
+  int16_t z[64] = {0};
+  size_t w = 0;
+  i2s_write(I2S_SPK_PORT, z, sizeof(z), &w, portMAX_DELAY);
+  spkRunning_ = true;
+}
+
+void spkStop() {
+  if (!spkRunning_) {
+    i2s_zero_dma_buffer(I2S_SPK_PORT);
+    return;
+  }
   i2s_zero_dma_buffer(I2S_SPK_PORT);
+  i2s_stop(I2S_SPK_PORT);
+  spkRunning_ = false;
+}
+
+void stopPlayback() {
+  spkStop();
 }
 
 void goIdle() {
   turnActive_ = false;
   lastAssistantText_ = "";
+  bargeLoudChunks_ = 0;
+  spkStop();
   fsm = FsmState::IDLE;
   vadRearmAtMs_ = millis() + TB_VAD_REARM_DELAY_MS;
   displayState();
@@ -203,6 +242,9 @@ void setupI2SSpeaker() {
   };
   i2s_driver_install(I2S_SPK_PORT, &cfg, 0, NULL);
   i2s_set_pin(I2S_SPK_PORT, &pin);
+  // 安装后立刻停时钟：空闲无 BCLK → MAX98357 休眠，减轻 PWM 嘶嘶
+  i2s_stop(I2S_SPK_PORT);
+  spkRunning_ = false;
 }
 
 bool readMicChunk(int16_t* out, size_t samples) {
@@ -214,8 +256,23 @@ bool readMicChunk(int16_t* out, size_t samples) {
 }
 
 void writeSpkChunk(const int16_t* pcm, size_t samples) {
-  size_t written = 0;
-  i2s_write(I2S_SPK_PORT, pcm, samples * sizeof(int16_t), &written, portMAX_DELAY);
+  spkEnsureStarted();
+  const int chunk = 128;
+  int16_t buf[chunk];
+  size_t off = 0;
+  while (off < samples) {
+    size_t n = samples - off;
+    if (n > (size_t)chunk) n = (size_t)chunk;
+    for (size_t i = 0; i < n; i++) {
+      int32_t s = ((int32_t)pcm[off + i] * (int32_t)TB_SPK_GAIN_Q8) >> 8;
+      if (s > 32767) s = 32767;
+      if (s < -32768) s = -32768;
+      buf[i] = (int16_t)s;
+    }
+    size_t written = 0;
+    i2s_write(I2S_SPK_PORT, buf, n * sizeof(int16_t), &written, portMAX_DELAY);
+    off += n;
+  }
 }
 
 void playBeep(int freq_hz, int duration_ms) {
@@ -223,6 +280,7 @@ void playBeep(int freq_hz, int duration_ms) {
   const int sampleRate = I2S_SPK_SAMPLE_RATE;
   const int n = sampleRate * duration_ms / 1000;
   if (n <= 0 || n > 4800) return;
+  spkEnsureStarted();
   const int chunk = 256;
   int16_t buf[chunk];
   for (int i = 0; i < n; ) {
@@ -253,6 +311,7 @@ void startVadRecord(const int16_t* firstChunk) {
   recordStartMs_ = millis();
   vadLastLoudMs_ = recordStartMs_;
   recordSamplesSent_ = 0;
+  bargeLoudChunks_ = 0;
   turnActive_ = true;
   lastAssistantText_ = "";
   lastUserText_ = "";
@@ -261,6 +320,32 @@ void startVadRecord(const int16_t* firstChunk) {
   displayState();
   cloud.sendAudio(firstChunk, AUDIO_CHUNK_SAMPLES);
   recordSamplesSent_ += AUDIO_CHUNK_SAMPLES;
+}
+
+void startVadRecordNoFirstChunk() {
+  Serial.println("[main] VAD speech start (no first chunk)");
+  recordStartMs_ = millis();
+  vadLastLoudMs_ = recordStartMs_;
+  recordSamplesSent_ = 0;
+  bargeLoudChunks_ = 0;
+  turnActive_ = true;
+  lastAssistantText_ = "";
+  lastUserText_ = "";
+  fsm = FsmState::RECORD;
+  cloud.markRecordStart();
+  displayState();
+}
+
+void beginBargeIn(bool keepFirstChunk, const int16_t* firstChunk) {
+  Serial.println("[main] barge-in");
+  bargeLoudChunks_ = 0;
+  spkStop();
+  cloud.sendInterrupt();
+  if (keepFirstChunk && firstChunk != nullptr) {
+    startVadRecord(firstChunk);
+  } else {
+    startVadRecordNoFirstChunk();
+  }
 }
 
 void finishVadRecord(bool discard) {
@@ -279,6 +364,7 @@ void finishVadRecord(bool discard) {
   Serial.printf("[main] VAD end, sending end (dur=%lu ms)\n", dur);
   cloud.sendEnd();
   cloud.markRecordEnd();
+  bargeLoudChunks_ = 0;
   fsm = FsmState::WAITING;
   displayState();
 }
@@ -328,6 +414,7 @@ void onTTS(const int16_t* pcm, size_t samples) {
   }
   if (fsm != FsmState::PLAYING) {
     fsm = FsmState::PLAYING;
+    bargeLoudChunks_ = 0;
     displayState();
   }
   writeSpkChunk(pcm, samples);
@@ -338,6 +425,15 @@ void onDone() {
     Serial.println("[main] TURN DONE (ignored, already idle)");
     return;
   }
+  // 打断后已进入 RECORD：忽略过期 done，避免把新录音打回 IDLE
+  if (fsm == FsmState::RECORD) {
+    Serial.println("[main] TURN DONE (stale, recording)");
+    return;
+  }
+  if (fsm != FsmState::WAITING && fsm != FsmState::PLAYING) {
+    Serial.println("[main] TURN DONE (ignored, unexpected state)");
+    return;
+  }
   Serial.println("[main] TURN DONE");
   goIdle();
 }
@@ -346,6 +442,7 @@ void onCloudError(const String& code, const String& msg) {
   Serial.printf("[main] ERROR %s: %s\n", code.c_str(), msg.c_str());
   stopPlayback();
   turnActive_ = false;
+  bargeLoudChunks_ = 0;
 
   if (code == "AUTH_FAIL" || code == "PROV_AUTH" || code == "PROV_NET" ||
       code == "TAKEN_OVER") {
@@ -408,6 +505,7 @@ void onCloudDisconnected() {
   Serial.println("[main] cloud disconnected");
   stopPlayback();
   turnActive_ = false;
+  bargeLoudChunks_ = 0;
   if (fsm == FsmState::RECORD || fsm == FsmState::WAITING ||
       fsm == FsmState::PLAYING) {
     fsm = FsmState::IDLE;
@@ -425,6 +523,7 @@ void setup() {
   Serial.println("========================================");
 
   pinMode(LED_PIN, OUTPUT);
+  pinMode(BTN_PIN, INPUT_PULLUP);
 
   setupOLED();
   oledFaceSet(FaceMood::Boot, "Booting...");
@@ -460,9 +559,10 @@ void setup() {
   vadRearmAtMs_ = millis() + TB_VAD_REARM_DELAY_MS;
   displayState();
   playBeep(1000, 200);
+  spkStop();
   // 蜂鸣后再延后武装，避免余音触发 VAD
   vadRearmAtMs_ = millis() + TB_VAD_REARM_DELAY_MS;
-  Serial.println("TinyBot ready, speak anytime (handsfree VAD)");
+  Serial.println("TinyBot ready, speak anytime (handsfree VAD + barge-in)");
 }
 
 void loop() {
@@ -514,8 +614,34 @@ void loop() {
       Serial.println("[main] record timeout");
       finishVadRecord(false);
     }
+  } else if (fsm == FsmState::WAITING || fsm == FsmState::PLAYING) {
+    // BOOT 立刻打断
+    if (digitalRead(BTN_PIN) == LOW) {
+      beginBargeIn(false, nullptr);
+      delay(5);
+      return;
+    }
+
+    int16_t buf[AUDIO_CHUNK_SAMPLES];
+    if (!readMicChunk(buf, AUDIO_CHUNK_SAMPLES)) {
+      delay(5);
+      return;
+    }
+    const int thr = (fsm == FsmState::PLAYING)
+                        ? TB_VAD_BARGE_THRESHOLD
+                        : TB_VAD_SPEECH_THRESHOLD;
+    const int level = chunkPeakPercent(buf, AUDIO_CHUNK_SAMPLES);
+    if (level >= thr) {
+      bargeLoudChunks_++;
+    } else {
+      bargeLoudChunks_ = 0;
+    }
+    if (bargeLoudChunks_ >= TB_VAD_BARGE_CHUNKS) {
+      // WAITING：首包是人声；PLAYING：首包含 TTS 泄漏，丢弃
+      const bool keep = (fsm == FsmState::WAITING);
+      beginBargeIn(keep, keep ? buf : nullptr);
+    }
   }
-  // WAITING / PLAYING：不跑 VAD（播报中不打断）
 
   delay(5);
 }

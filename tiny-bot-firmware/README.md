@@ -60,15 +60,16 @@ make monitor         # serial monitor
 
 ### 5. Use it
 
-With the cloud ready, OLED shows a **face** and bottom status `Speak anytime`. **Just talk** (hands-free energy VAD; no BOOT button):
+With the cloud ready, OLED shows a **face** and bottom status `Speak anytime`. **Just talk** (hands-free energy VAD; no BOOT button to start):
 
 1. Idle: blink / look around  
 2. Speak → listening face + `Listening...`  
 3. ~1.1s silence → thinking + `Thinking...` → happy + `Speaking`  
-4. After TTS, back to idle (no barge-in while speaking)
+4. During thinking/speaking: speak again or press **BOOT** to barge-in (serial: `[main] barge-in`, `[cloud] >> interrupt`)  
+5. After TTS (or barge-in end), back to idle  
 
 Transcript and reply text go to the **serial port**, not the OLED.  
-Tune VAD in `config.h`: `TB_VAD_SPEECH_THRESHOLD` / `TB_VAD_SILENCE_MS` / `TB_VAD_MIN_SPEECH_MS`.
+Tune in `config.h`: `TB_VAD_*`, `TB_VAD_BARGE_*`, `TB_SPK_GAIN_Q8`. Loudness/noise: flash and listen on device (compile-checked only in CI/dev without board).
 
 ## Layout
 
@@ -111,6 +112,9 @@ Follow the [step-by-step build guide](../../docs/step-by-step-build-guide.md):
 | `TB_VAD_SILENCE_MS` | | `1100` | Silence to end utterance |
 | `TB_VAD_MIN_SPEECH_MS` | | `400` | Min speech before silence can end |
 | `TB_VAD_REARM_DELAY_MS` | | `250` | Cool-down before listening again |
+| `TB_VAD_BARGE_THRESHOLD` | | `40` | Barge-in peak threshold while speaking |
+| `TB_VAD_BARGE_CHUNKS` | | `3` | Consecutive loud chunks before barge-in (~96ms) |
+| `TB_SPK_GAIN_Q8` | | `220` | Digital speaker gain (Q8; 256=1.0); raise if GAIN=6dB is quiet |
 
 ## Cloud integration
 
@@ -119,8 +123,9 @@ Follow the [step-by-step build guide](../../docs/step-by-step-build-guide.md):
 
 ## Known limits
 
-- **Barge-in**: disabled during speak / thinking (avoids speaker loopback); listen again after TTS  
+- **Barge-in**: energy + BOOT during thinking/speaking; raise `TB_VAD_BARGE_THRESHOLD` if speaker loopback false-triggers (no AEC)  
 - **VAD**: on-device peak energy; noisy rooms may need a higher `TB_VAD_SPEECH_THRESHOLD`  
+- **Audio UX on device**: digital gain + idle I2S clock stop are implemented; verify loudness/hiss on hardware  
 - **OLED**: face + status bar only; chat text on serial  
 - **Multi-device**: NVS key is fixed `tinybot/token` (fine for one device)  
 - **WS auth fail**: clears NVS token and re-provisions on next boot  

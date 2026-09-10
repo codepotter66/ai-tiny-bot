@@ -105,6 +105,13 @@
 #define TB_VAD_SILENCE_MS 1100
 #define TB_VAD_MIN_SPEECH_MS 400
 #define TB_VAD_REARM_DELAY_MS 250
+// PLAYING 打断：阈值高于闲时，减轻喇叭回灌误触发；连续超阈 chunk 数（512@16k ≈ 32ms）
+#define TB_VAD_BARGE_THRESHOLD 40
+#define TB_VAD_BARGE_CHUNKS 3
+
+// 喇叭数字音量（Q8 定点数）：220 ≈ 0.86，满幅约留 14% 削波余量
+//   GAIN=6dB 后仍偏小可调到 256～320；>256 时固件会饱和钳位
+#define TB_SPK_GAIN_Q8 220
 
 // ============================================================
 // 协议版本（与 ws-protocol.schema.json 对应）

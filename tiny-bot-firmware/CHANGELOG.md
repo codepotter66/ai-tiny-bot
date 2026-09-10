@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **数字音量 `TB_SPK_GAIN_Q8`**：TTS 写入喇叭前按 Q8 增益并饱和；默认 220（约 0.86，预留削波余量）；GAIN=6dB 后仍偏小可调到 256～320
+- **空闲停喇叭 I2S 时钟**：IDLE/非播放时 `i2s_stop`（无 BCLK → MAX98357 休眠），减轻空载 PWM 嘶嘶；出声前 `i2s_start` 并先写静音
+- **Thinking / 播报打断（barge-in）**：WAITING/PLAYING 能量 VAD 或 BOOT 发 `interrupt` 并进入 RECORD；PLAYING 用更高阈值 `TB_VAD_BARGE_*`；忽略打断后过期 `done`
 - **WebSocket `status` 进度回调**：`CloudClient` 解析下行 `type=status`（`step`/`phase`/`text`），经 `OnStatus` 回调；`main` 在 WAITING 等状态用 `text`（截断 21 字符）更新 OLED。用于展示 agent 多步 tool 进度且不触发 TTS；`tool` 仍作无 `status` 时的兜底显示。
 
 ### Fixed
@@ -15,7 +18,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- **测试说明补 `status` 串口口径**：`test/README.md` / `README.zh-CN.md` 写明完整固件应出现 `[cloud] << status` 与 `[main] STATUS`，OLED 显示 `text`（最多 21 字）
+- **测试说明补 `status` / barge-in 串口口径**：完整固件应出现 `[cloud] << status`、`[main] STATUS`；打断时应出现 `[cloud] >> interrupt` 与 `[main] barge-in`
 - **`README.md` 快速开始**：补充 PlatformIO CLI 常见路径、将 CLI 加入 PATH 的写法，以及「不改 PATH 可直接 `make …`」的说明；烧录示例增加 `make audio`。
 - **`step3_audio` 实时回放**：麦克风 → 喇叭 loopback（16-bit 直读）；启动提示音；`LOOPBACK_GAIN` 默认 2。
 - **文档补充 `seed` 含义**：`seed` 是云端预登记设备（入场许可），不是立刻上线；未 seed 会导致 provision 401 / OLED Reconnecting。

@@ -19,6 +19,7 @@ Each stage prints status via `Serial.println()`:
 - **step2_oled.cpp**: `OLED init OK!` or errors
 - **step3_audio.cpp**: mic level numbers
 - **main firmware**: `[cloud] << status step=… phase=… text=…` then `[main] STATUS …`; OLED shows `text` (max 21 chars) during WAITING
+- **main barge-in**: during Thinking/Speaking, speak or press BOOT → `[main] barge-in` and `[cloud] >> interrupt`; OLED → `Listening...`
 
 ### 3. Hardware behavior
 
